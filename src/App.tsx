@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useAuthStore } from './store';
+import { useSupabaseInit, useSupabaseAuth } from './hooks/useSupabaseInit';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -34,6 +35,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Inicializar Supabase y cargar datos
+  useSupabaseInit();
+  useSupabaseAuth();
+  
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
