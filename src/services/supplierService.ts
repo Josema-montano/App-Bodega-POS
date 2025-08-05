@@ -1,5 +1,6 @@
 import { supabase, handleSupabaseError } from '../lib/supabase'
 import type { Supplier } from '../types'
+import { useAppStore } from '../store'
 
 export const supplierService = {
   // Obtener todos los proveedores
@@ -15,12 +16,11 @@ export const supplierService = {
       return data?.map(item => ({
         id: item.id,
         name: item.name,
+        contactPerson: item.contact_person,
         email: item.email,
         phone: item.phone,
         address: item.address,
-        contactPerson: item.contact_person,
-        paymentTerms: 30, // TODO: agregar campo en BD
-        currentDebt: 0, // TODO: agregar campo en BD
+        isActive: item.is_active,
         createdAt: new Date(item.created_at),
         updatedAt: new Date(item.updated_at)
       })) || []
@@ -40,18 +40,29 @@ export const supplierService = {
         .single()
       
       if (error) throw error
-      return {
+      const supplier = {
         id: data.id,
         name: data.name,
+        contactPerson: data.contact_person,
         email: data.email,
         phone: data.phone,
         address: data.address,
-        contactPerson: data.contact_person,
-        paymentTerms: 30, // TODO: agregar campo en BD
-        currentDebt: 0, // TODO: agregar campo en BD
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
+
+      // Crear notificación de nuevo proveedor
+       const { addNotification } = useAppStore.getState();
+       addNotification({
+         type: 'info',
+         title: 'Nuevo Proveedor Registrado',
+         message: `Se ha registrado un nuevo proveedor: ${supplier.name} (${supplier.email}).`,
+         priority: 'low',
+         read: false
+       });
+
+      return supplier
     } catch (error) {
       handleSupabaseError(error)
       return null
@@ -68,7 +79,8 @@ export const supplierService = {
           contact_person: supplier.contactPerson,
           email: supplier.email,
           phone: supplier.phone,
-          address: supplier.address
+          address: supplier.address,
+          is_active: supplier.isActive ?? true
         })
         .select()
         .single()
@@ -77,12 +89,11 @@ export const supplierService = {
       return {
         id: data.id,
         name: data.name,
+        contactPerson: data.contact_person,
         email: data.email,
         phone: data.phone,
         address: data.address,
-        contactPerson: data.contact_person,
-        paymentTerms: 30, // TODO: agregar campo en BD
-        currentDebt: 0, // TODO: agregar campo en BD
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
@@ -101,7 +112,7 @@ export const supplierService = {
       if (supplier.email !== undefined) updateData.email = supplier.email
       if (supplier.phone !== undefined) updateData.phone = supplier.phone
       if (supplier.address !== undefined) updateData.address = supplier.address
-      // Removed isActive field as it's not in Supplier type
+      if (supplier.isActive !== undefined) updateData.is_active = supplier.isActive
 
       const { data, error } = await supabase
         .from('suppliers')
@@ -114,12 +125,11 @@ export const supplierService = {
       return {
         id: data.id,
         name: data.name,
+        contactPerson: data.contact_person,
         email: data.email,
         phone: data.phone,
         address: data.address,
-        contactPerson: data.contact_person,
-        paymentTerms: 30, // TODO: agregar campo en BD
-        currentDebt: 0, // TODO: agregar campo en BD
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
@@ -158,12 +168,11 @@ export const supplierService = {
       return data?.map(item => ({
         id: item.id,
         name: item.name,
+        contactPerson: item.contact_person,
         email: item.email,
         phone: item.phone,
         address: item.address,
-        contactPerson: item.contact_person,
-        paymentTerms: 30, // TODO: agregar campo en BD
-        currentDebt: 0, // TODO: agregar campo en BD
+        isActive: item.is_active,
         createdAt: new Date(item.created_at),
         updatedAt: new Date(item.updated_at)
       })) || []

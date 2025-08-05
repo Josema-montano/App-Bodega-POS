@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Eye, Mail, Phone, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -7,7 +7,7 @@ import { Select } from '../components/ui/Select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { useCustomersStore, useAuthStore } from '../store';
-import { Customer, CustomerType } from '../types';
+import { Customer } from '../types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,34 +19,24 @@ const customerSchema = z.object({
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   phone: z.string().min(1, 'El teléfono es requerido'),
   address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  type: z.enum(['individual', 'business']),
-  taxId: z.string().optional(),
-  creditLimit: z.number().min(0, 'El límite de crédito debe ser mayor o igual a 0').optional(),
-  notes: z.string().optional(),
-  currentDebt: z.number().optional()
+  currentDebt: z.number().min(0, 'La deuda actual debe ser mayor o igual a 0').optional(),
+  creditLimit: z.number().min(0, 'El límite de crédito debe ser mayor o igual a 0').optional()
 });
 
 type CustomerFormData = z.infer<typeof customerSchema>;
 
-const customerTypeOptions = [
-  { value: 'individual', label: 'Individual' },
-  { value: 'business', label: 'Empresa' }
-];
-
-const typeFilterOptions = [
-  { value: '', label: 'Todos los tipos' },
-  { value: 'individual', label: 'Individual' },
-  { value: 'business', label: 'Empresa' }
-];
+// Removed type options as type field doesn't exist in schema
 
 export const Customers: React.FC = () => {
-  const { customers, addCustomer, updateCustomer, deleteCustomer } = useCustomersStore();
+  const { customers, addCustomer, updateCustomer, deleteCustomer, fetchCustomers, loading, error } = useCustomersStore();
+
+  // Cargar clientes al montar el componente
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
   const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  // Removed typeFilter as type field doesn't exist in schema
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -61,7 +51,6 @@ export const Customers: React.FC = () => {
   } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
-      type: 'individual',
       creditLimit: 0,
       currentDebt: 0
     }
@@ -71,15 +60,13 @@ export const Customers: React.FC = () => {
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          customer.phone.includes(searchTerm);
-    const matchesType = !typeFilter || customer.type === typeFilter;
     
-    return matchesSearch && matchesType;
+    return matchesSearch;
   });
 
   const totalCustomers = customers.length;
-  const individualCustomers = customers.filter(c => c.type === 'individual').length;
-  const businessCustomers = customers.filter(c => c.type === 'business').length;
   const totalCreditLimit = customers.reduce((sum, c) => sum + (c.creditLimit || 0), 0);
+  const totalDebt = customers.reduce((sum, c) => sum + (c.currentDebt || 0), 0);
 
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
@@ -89,13 +76,8 @@ export const Customers: React.FC = () => {
         email: customer.email || '',
         phone: customer.phone,
         address: customer.address || '',
-        city: customer.city || '',
-        state: customer.state || '',
-        zipCode: customer.zipCode || '',
-        type: customer.type,
-        taxId: customer.taxId || '',
-        creditLimit: customer.creditLimit || 0,
-        notes: customer.notes || ''
+        currentDebt: customer.currentDebt || 0,
+        creditLimit: customer.creditLimit || 0
       });
     } else {
       setSelectedCustomer(null);
@@ -104,14 +86,8 @@ export const Customers: React.FC = () => {
         email: '',
         phone: '',
         address: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        type: 'individual',
-        taxId: '',
-        creditLimit: 0,
-        notes: '',
-        currentDebt: 0
+        currentDebt: 0,
+        creditLimit: 0
       });
     }
     setIsModalOpen(true);
@@ -146,13 +122,9 @@ export const Customers: React.FC = () => {
       ...data,
       email: data.email || undefined,
       address: data.address || undefined,
-      city: data.city || undefined,
-      state: data.state || undefined,
-      zipCode: data.zipCode || undefined,
-      taxId: data.taxId || undefined,
+      currentDebt: data.currentDebt ?? 0,
       creditLimit: data.creditLimit || 0,
-      notes: data.notes || undefined,
-      currentDebt: data.currentDebt ?? 0
+      isActive: true
     };
 
     if (selectedCustomer) {
@@ -163,12 +135,37 @@ export const Customers: React.FC = () => {
     handleCloseModal();
   };
 
-  const getTypeLabel = (type: CustomerType) => {
-    return customerTypeOptions.find(opt => opt.value === type)?.label || type;
-  };
+  // Removed getTypeLabel function as CustomerType doesn't exist in schema
 
-  const canEdit = user?.role === 'admin' || user?.role === 'worker';
+  const canEdit = user?.role === 'admin' || user?.role === 'employee';
   const canDelete = user?.role === 'admin';
+
+  // Mostrar estado de carga
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando clientes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si existe
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <Eye className="h-12 w-12 mx-auto" />
+          </div>
+          <p className="text-red-600 mb-4">Error al cargar clientes: {error}</p>
+          <Button onClick={() => fetchCustomers()}>Reintentar</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -209,8 +206,8 @@ export const Customers: React.FC = () => {
                 <MapPin className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Individuales</p>
-                <p className="text-2xl font-bold text-gray-900">{individualCustomers}</p>
+                <p className="text-sm font-medium text-gray-600">Deuda Total</p>
+                <p className="text-2xl font-bold text-gray-900">${totalDebt.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -223,8 +220,8 @@ export const Customers: React.FC = () => {
                 <Mail className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Empresas</p>
-                <p className="text-2xl font-bold text-gray-900">{businessCustomers}</p>
+                <p className="text-sm font-medium text-gray-600">Clientes Activos</p>
+                <p className="text-2xl font-bold text-gray-900">{customers.filter(c => c.isActive).length}</p>
               </div>
             </div>
           </CardContent>
@@ -260,13 +257,7 @@ export const Customers: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="w-full sm:w-48">
-              <Select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                options={typeFilterOptions}
-              />
-            </div>
+            {/* Removed type filter as type field doesn't exist in schema */}
           </div>
         </CardContent>
       </Card>
@@ -281,10 +272,10 @@ export const Customers: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Tipo</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>Ciudad</TableHead>
+                <TableHead>Dirección</TableHead>
+                <TableHead>Deuda Actual</TableHead>
                 <TableHead>Límite Crédito</TableHead>
                 <TableHead>Fecha Registro</TableHead>
                 <TableHead>Acciones</TableHead>
@@ -294,18 +285,10 @@ export const Customers: React.FC = () => {
               {filteredCustomers.map((customer) => (
                 <TableRow key={customer.id}>
                   <TableCell className="font-medium">{customer.name}</TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      customer.type === 'business' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {getTypeLabel(customer.type)}
-                    </span>
-                  </TableCell>
                   <TableCell>{customer.email || '-'}</TableCell>
                   <TableCell>{customer.phone}</TableCell>
-                  <TableCell>{customer.city || '-'}</TableCell>
+                  <TableCell>{customer.address || '-'}</TableCell>
+                  <TableCell>${(customer.currentDebt || 0).toLocaleString()}</TableCell>
                   <TableCell>${(customer.creditLimit || 0).toLocaleString()}</TableCell>
                   <TableCell>
                     {format(new Date(customer.createdAt), 'dd/MM/yyyy', { locale: es })}
@@ -360,19 +343,11 @@ export const Customers: React.FC = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Nombre *"
-              {...register('name')}
-              error={errors.name?.message}
-            />
-            <Select
-              label="Tipo *"
-              {...register('type')}
-              options={customerTypeOptions}
-              error={errors.type?.message}
-            />
-          </div>
+          <Input
+            label="Nombre *"
+            {...register('name')}
+            error={errors.name?.message}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
@@ -394,29 +369,15 @@ export const Customers: React.FC = () => {
             error={errors.address?.message}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Ciudad"
-              {...register('city')}
-              error={errors.city?.message}
-            />
-            <Input
-              label="Estado"
-              {...register('state')}
-              error={errors.state?.message}
-            />
-            <Input
-              label="Código Postal"
-              {...register('zipCode')}
-              error={errors.zipCode?.message}
-            />
-          </div>
+          {/* Removed city, state, zipCode fields as they don't exist in schema */}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="RFC/Tax ID"
-              {...register('taxId')}
-              error={errors.taxId?.message}
+              label="Deuda Actual"
+              type="number"
+              step="0.01"
+              {...register('currentDebt', { valueAsNumber: true })}
+              error={errors.currentDebt?.message}
             />
             <Input
               label="Límite de Crédito"
@@ -427,20 +388,7 @@ export const Customers: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notas
-            </label>
-            <textarea
-              {...register('notes')}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Notas adicionales..."
-            />
-            {errors.notes && (
-              <p className="mt-1 text-sm text-red-600">{errors.notes.message}</p>
-            )}
-          </div>
+          {/* Removed notes field as it doesn't exist in schema */}
 
           <ModalFooter>
             <Button type="button" variant="outline" onClick={handleCloseModal}>
@@ -462,25 +410,11 @@ export const Customers: React.FC = () => {
       >
         {selectedCustomer && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
-                </label>
-                <p className="text-gray-900">{selectedCustomer.name}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo
-                </label>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  selectedCustomer.type === 'business' 
-                    ? 'bg-blue-100 text-blue-800' 
-                    : 'bg-green-100 text-green-800'
-                }`}>
-                  {getTypeLabel(selectedCustomer.type)}
-                </span>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre
+              </label>
+              <p className="text-gray-900">{selectedCustomer.name}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -507,33 +441,14 @@ export const Customers: React.FC = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ciudad
-                </label>
-                <p className="text-gray-900">{selectedCustomer.city || 'No especificada'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estado
-                </label>
-                <p className="text-gray-900">{selectedCustomer.state || 'No especificado'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Código Postal
-                </label>
-                <p className="text-gray-900">{selectedCustomer.zipCode || 'No especificado'}</p>
-              </div>
-            </div>
+            {/* Removed city, state, zipCode fields as they don't exist in schema */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  RFC/Tax ID
+                  Deuda Actual
                 </label>
-                <p className="text-gray-900">{selectedCustomer.taxId || 'No especificado'}</p>
+                <p className="text-gray-900">${(selectedCustomer.currentDebt || 0).toLocaleString()}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -562,14 +477,7 @@ export const Customers: React.FC = () => {
               </div>
             </div>
 
-            {selectedCustomer.notes && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas
-                </label>
-                <p className="text-gray-900">{selectedCustomer.notes}</p>
-              </div>
-            )}
+            {/* Removed notes field as it doesn't exist in schema */}
           </div>
         )}
         <ModalFooter>

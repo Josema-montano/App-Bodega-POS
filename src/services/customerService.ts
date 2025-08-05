@@ -1,5 +1,6 @@
 import { supabase, handleSupabaseError } from '../lib/supabase'
 import type { Customer } from '../types'
+import { useAppStore } from '../store'
 
 export const customerService = {
   // Obtener todos los clientes
@@ -18,9 +19,9 @@ export const customerService = {
         email: item.email,
         phone: item.phone,
         address: item.address,
-        type: 'individual' as const, // TODO: agregar campo type en BD
         creditLimit: item.credit_limit || 0,
         currentDebt: item.current_debt || 0,
+        isActive: item.is_active,
         createdAt: new Date(item.created_at),
         updatedAt: new Date(item.updated_at)
       })) || []
@@ -40,18 +41,30 @@ export const customerService = {
         .single()
       
       if (error) throw error
-      return {
+      const customer = {
         id: data.id,
         name: data.name,
         email: data.email,
         phone: data.phone,
         address: data.address,
-        type: 'individual' as const, // TODO: agregar campo type en BD
         creditLimit: data.credit_limit || 0,
         currentDebt: data.current_debt || 0,
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
+
+      // Crear notificación de nuevo cliente
+       const { addNotification } = useAppStore.getState();
+       addNotification({
+         type: 'info',
+         title: 'Nuevo Cliente Registrado',
+         message: `Se ha registrado un nuevo cliente: ${customer.name} (${customer.email}).`,
+         priority: 'low',
+         read: false
+       });
+
+      return customer
     } catch (error) {
       handleSupabaseError(error)
       return null
@@ -68,9 +81,9 @@ export const customerService = {
           email: customer.email,
           phone: customer.phone,
           address: customer.address,
-          current_debt: customer.currentDebt,
-          credit_limit: customer.creditLimit,
-          is_active: customer.isActive
+          current_debt: customer.currentDebt || 0,
+          credit_limit: customer.creditLimit || 0,
+          is_active: customer.isActive ?? true
         })
         .select()
         .single()
@@ -82,9 +95,9 @@ export const customerService = {
         email: data.email,
         phone: data.phone,
         address: data.address,
-        type: 'individual' as const, // TODO: agregar campo type en BD
         creditLimit: data.credit_limit || 0,
         currentDebt: data.current_debt || 0,
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
@@ -120,9 +133,9 @@ export const customerService = {
         email: data.email,
         phone: data.phone,
         address: data.address,
-        type: 'individual' as const, // TODO: agregar campo type en BD
         creditLimit: data.credit_limit || 0,
         currentDebt: data.current_debt || 0,
+        isActive: data.is_active,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at)
       }
@@ -164,9 +177,9 @@ export const customerService = {
         email: item.email,
         phone: item.phone,
         address: item.address,
-        type: 'individual' as const, // TODO: agregar campo type en BD
         creditLimit: item.credit_limit || 0,
         currentDebt: item.current_debt || 0,
+        isActive: item.is_active,
         createdAt: new Date(item.created_at),
         updatedAt: new Date(item.updated_at)
       })) || []

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -11,37 +11,78 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { useAuthStore, useProductsStore, useCustomersStore, useSalesStore, useAppStore } from '../store';
+import { useAuthStore, useProductsStore, useCustomersStore, useSalesStore, useAppStore, useTransactionsStore } from '../store';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
-// Mock data para gráficos
-const salesData = [
-  { name: 'Lun', ventas: 12, ingresos: 2400 },
-  { name: 'Mar', ventas: 19, ingresos: 3800 },
-  { name: 'Mié', ventas: 8, ingresos: 1600 },
-  { name: 'Jue', ventas: 15, ingresos: 3000 },
-  { name: 'Vie', ventas: 22, ingresos: 4400 },
-  { name: 'Sáb', ventas: 28, ingresos: 5600 },
-  { name: 'Dom', ventas: 16, ingresos: 3200 }
-];
 
-const topProducts = [
-  { name: 'Vino Tinto Reserva', sales: 45, revenue: 1125 },
-  { name: 'Vino Blanco Premium', sales: 32, revenue: 960 },
-  { name: 'Vino Rosé Especial', sales: 28, revenue: 840 }
-];
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuthStore();
-  const { products, getLowStockProducts } = useProductsStore();
-  const { customers } = useCustomersStore();
-  const { sales, getTodaySales } = useSalesStore();
+  const { products, getLowStockProducts, fetchProducts, loading: productsLoading } = useProductsStore();
+  const { customers, fetchCustomers, loading: customersLoading } = useCustomersStore();
+  const { sales, getTodaySales, fetchSales, loading: salesLoading } = useSalesStore();
   const { notifications } = useAppStore();
+  const { transactions } = useTransactionsStore();
+
+  // Cargar datos iniciales al montar el componente
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          fetchProducts(),
+          fetchCustomers(),
+          fetchSales()
+        ]);
+      } catch (error) {
+        console.error('Error al cargar datos iniciales:', error);
+      }
+    };
+
+    loadInitialData();
+  }, [fetchProducts, fetchCustomers, fetchSales]);
 
   const lowStockProducts = getLowStockProducts();
   const todaySales = getTodaySales();
-  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
+  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
   const unreadNotifications = notifications.filter(n => !n.read);
+
+  // Calcular datos de hoy
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  
+  const todayTransactions = transactions.filter(transaction => {
+    const transactionDate = new Date(transaction.transactionDate);
+    return transactionDate >= startOfDay && transactionDate <= endOfDay;
+  });
+
+  // Datos reales para gráficos de hoy
+  const todayData = [{
+    name: 'Hoy',
+    ventas: todaySales.length,
+    ingresos: todayRevenue
+  }];
+
+  // Calcular productos más vendidos de hoy
+  const productSales = todaySales.reduce((acc, sale) => {
+    sale.items.forEach(item => {
+      const productName = products.find(p => p.id === item.productId)?.name || 'Producto desconocido';
+      if (!acc[item.productId]) {
+        acc[item.productId] = {
+          name: productName,
+          sales: 0,
+          revenue: 0
+        };
+      }
+      acc[item.productId].sales += item.quantity;
+      acc[item.productId].revenue += item.quantity * item.unitPrice;
+    });
+    return acc;
+  }, {} as Record<string, { name: string; sales: number; revenue: number }>);
+
+  const topProducts = Object.values(productSales)
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, 3);
 
   const stats = [
     {
@@ -128,11 +169,11 @@ export const Dashboard: React.FC = () => {
         {/* Sales Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Ventas de la Semana</CardTitle>
+            <CardTitle>Ventas de Hoy</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={salesData}>
+              <BarChart data={todayData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
@@ -146,11 +187,11 @@ export const Dashboard: React.FC = () => {
         {/* Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Ingresos de la Semana</CardTitle>
+            <CardTitle>Ingresos de Hoy</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesData}>
+              <LineChart data={todayData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
@@ -166,22 +207,26 @@ export const Dashboard: React.FC = () => {
         {/* Top Products */}
         <Card>
           <CardHeader>
-            <CardTitle>Productos Más Vendidos</CardTitle>
+            <CardTitle>Productos Más Vendidos Hoy</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topProducts.map((product, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{product.name}</p>
-                    <p className="text-sm text-gray-600">{product.sales} unidades</p>
+            {topProducts.length === 0 ? (
+              <p className="text-gray-600">No hay ventas registradas hoy</p>
+            ) : (
+              <div className="space-y-4">
+                {topProducts.map((product, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{product.name}</p>
+                      <p className="text-sm text-gray-600">{product.sales} unidades</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-gray-900">${product.revenue.toLocaleString()}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">${product.revenue}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -202,7 +247,7 @@ export const Dashboard: React.FC = () => {
                   <div key={product.id} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{product.name}</p>
-                      <p className="text-sm text-red-600">Stock: {product.stock} {product.unit}</p>
+                      <p className="text-sm text-red-600">Stock: N/A</p>
                     </div>
                     <Button size="sm" variant="outline">
                       Reabastecer

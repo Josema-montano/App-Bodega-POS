@@ -22,7 +22,6 @@ export const useSupabaseInit = () => {
           .from('users')
           .select('count')
           .limit(1)
-        
         if (error) {
           console.error('Error de conexión con Supabase:', error)
           toast.error('Error de conexión con la base de datos')
@@ -34,7 +33,6 @@ export const useSupabaseInit = () => {
         toast.error('No se pudo conectar con la base de datos')
       }
     }
-
     checkConnection()
   }, [])
 
@@ -43,119 +41,68 @@ export const useSupabaseInit = () => {
     if (isAuthenticated) {
       const loadInitialData = async () => {
         try {
-          // Cargar datos en paralelo para mejor rendimiento
           await Promise.all([
             fetchProducts(),
             fetchCustomers(),
             fetchSuppliers(),
             fetchSales()
           ])
-          
           console.log('✅ Datos iniciales cargados correctamente')
         } catch (error) {
           console.error('Error al cargar datos iniciales:', error)
           toast.error('Error al cargar los datos de la aplicación')
         }
       }
-
       loadInitialData()
-    }
-  }, [isAuthenticated, fetchProducts, fetchCustomers, fetchSuppliers, fetchSales])
-
-  // Configurar listener para cambios en tiempo real (opcional)
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    // Listener para cambios en productos
-    const productsSubscription = supabase
-      .channel('products-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'products' },
-        (payload) => {
-          console.log('Cambio en productos:', payload)
-          // Recargar productos cuando hay cambios
-          fetchProducts()
-        }
-      )
-      .subscribe()
-
-    // Listener para cambios en clientes
-    const customersSubscription = supabase
-      .channel('customers-changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'customers' },
-        (payload) => {
-          console.log('Cambio en clientes:', payload)
-          fetchCustomers()
-        }
-      )
-      .subscribe()
-
-    // Listener para cambios en proveedores
-    const suppliersSubscription = supabase
-      .channel('suppliers-changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'suppliers' },
-        (payload) => {
-          console.log('Cambio en proveedores:', payload)
-          fetchSuppliers()
-        }
-      )
-      .subscribe()
-
-    // Listener para cambios en ventas
-    const salesSubscription = supabase
-      .channel('sales-changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
-        (payload) => {
-          console.log('Cambio en ventas:', payload)
-          fetchSales()
-        }
-      )
-      .subscribe()
-
-    // Cleanup: desuscribirse cuando el componente se desmonta
-    return () => {
-      supabase.removeChannel(productsSubscription)
-      supabase.removeChannel(customersSubscription)
-      supabase.removeChannel(suppliersSubscription)
-      supabase.removeChannel(salesSubscription)
     }
   }, [isAuthenticated, fetchProducts, fetchCustomers, fetchSuppliers, fetchSales])
 }
 
-/**
- * Hook para verificar el estado de autenticación con Supabase
- */
+import { useRef } from 'react'
 export const useSupabaseAuth = () => {
   const { user, isAuthenticated, logout } = useAuthStore()
+  const isProcessingAuth = useRef(false)
 
   useEffect(() => {
     // Verificar sesión actual
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session && isAuthenticated) {
-        // Si no hay sesión pero el store dice que está autenticado, cerrar sesión
-        logout()
+      if (isProcessingAuth.current) return
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session && isAuthenticated && !isProcessingAuth.current) {
+          isProcessingAuth.current = true
+          await logout()
+          isProcessingAuth.current = false
+        }
+      } catch (error) {
+        console.error('Error verificando sesión:', error)
+        isProcessingAuth.current = false
       }
     }
-
     checkSession()
 
     // Listener para cambios en el estado de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Cambio en autenticación:', event, session)
-        
-        if (event === 'SIGNED_OUT' || !session) {
-          logout()
+        if (event !== 'TOKEN_REFRESHED') {
+          console.log('Auth event:', event)
+        }
+        if ((event === 'SIGNED_OUT' || !session) && isAuthenticated && !isProcessingAuth.current) {
+          isProcessingAuth.current = true
+          try {
+            await logout()
+          } catch (error) {
+            console.error('Error en logout:', error)
+          } finally {
+            isProcessingAuth.current = false
+          }
         }
       }
     )
-
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      isProcessingAuth.current = false
+    }
   }, [isAuthenticated, logout])
 
   return { user, isAuthenticated }

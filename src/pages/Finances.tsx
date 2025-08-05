@@ -1,28 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Eye, DollarSign, TrendingUp, TrendingDown, Calendar, FileText, CreditCard } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { Modal, ModalFooter } from '../components/ui/Modal';
-import { useSalesStore, useAuthStore, useAppStore } from '../store';
+import { useSalesStore, useAuthStore, useAppStore, useTransactionsStore } from '../store';
 import { Transaction, TransactionType } from '../types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const transactionSchema = z.object({
   type: z.enum(['income', 'expense']),
   amount: z.number().min(0.01, 'El monto debe ser mayor a 0'),
   description: z.string().min(1, 'La descripción es requerida'),
   category: z.string().min(1, 'La categoría es requerida'),
-  paymentMethod: z.enum(['cash', 'card', 'transfer', 'check']),
-  reference: z.string().optional(),
-  notes: z.string().optional()
+  paymentMethod: z.enum(['cash', 'card', 'transfer', 'check'])
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
@@ -65,9 +64,9 @@ const typeFilterOptions = [
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
 export const Finances: React.FC = () => {
-  const { sales } = useSalesStore();
+  const { sales, fetchSales } = useSalesStore();
   const { user } = useAuthStore();
-  const { transactions, addTransaction } = useAppStore();
+  const { transactions, fetchTodayTransactions, addTransaction } = useTransactionsStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,85 +88,62 @@ export const Finances: React.FC = () => {
     }
   });
 
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await fetchTodayTransactions();
+        await fetchSales();
+      } catch (error) {
+        console.error('Error al cargar datos:', error);
+        toast.error('Error al cargar los datos financieros');
+      }
+    };
+    loadData();
+  }, [fetchTodayTransactions, fetchSales]);
+
   const watchedType = watch('type');
 
-  // Calculate financial metrics
-  const currentMonth = new Date();
-  const previousMonth = subMonths(currentMonth, 1);
-  
-  const currentMonthStart = startOfMonth(currentMonth);
-  const currentMonthEnd = endOfMonth(currentMonth);
-  const previousMonthStart = startOfMonth(previousMonth);
-  const previousMonthEnd = endOfMonth(previousMonth);
+  // Calculate financial metrics for today
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
 
-  // Sales revenue
-  const currentMonthSales = sales.filter(sale => {
+  // Sales revenue for today
+  const todaySales = sales.filter(sale => {
     const saleDate = new Date(sale.createdAt);
-    return saleDate >= currentMonthStart && saleDate <= currentMonthEnd;
-  });
-  
-  const previousMonthSales = sales.filter(sale => {
-    const saleDate = new Date(sale.createdAt);
-    return saleDate >= previousMonthStart && saleDate <= previousMonthEnd;
+    return saleDate >= startOfDay && saleDate <= endOfDay;
   });
 
-  const currentMonthRevenue = currentMonthSales.reduce((sum, sale) => sum + sale.total, 0);
-  const previousMonthRevenue = previousMonthSales.reduce((sum, sale) => sum + sale.total, 0);
-  const revenueGrowth = previousMonthRevenue > 0 
-    ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100 
-    : 0;
+  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
 
-  // Transactions
-  const currentMonthTransactions = transactions.filter(transaction => {
+  // Transactions for today
+  const todayTransactions = transactions.filter(transaction => {
     const transactionDate = new Date(transaction.createdAt);
-    return transactionDate >= currentMonthStart && transactionDate <= currentMonthEnd;
+    return transactionDate >= startOfDay && transactionDate <= endOfDay;
   });
 
-  const currentMonthIncome = currentMonthTransactions
+  const todayIncome = todayTransactions
     .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0) + currentMonthRevenue;
+    .reduce((sum, t) => sum + t.amount, 0) + todayRevenue;
 
-  const currentMonthExpenses = currentMonthTransactions
+  const todayExpenses = todayTransactions
     .filter(t => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const netProfit = currentMonthIncome - currentMonthExpenses;
-  const profitMargin = currentMonthIncome > 0 ? (netProfit / currentMonthIncome) * 100 : 0;
+  const netProfit = todayIncome - todayExpenses;
+  const profitMargin = todayIncome > 0 ? (netProfit / todayIncome) * 100 : 0;
 
-  // Chart data
-  const last6Months = Array.from({ length: 6 }, (_, i) => {
-    const date = subMonths(currentMonth, 5 - i);
-    const monthStart = startOfMonth(date);
-    const monthEnd = endOfMonth(date);
-    
-    const monthSales = sales.filter(sale => {
-      const saleDate = new Date(sale.createdAt);
-      return saleDate >= monthStart && saleDate <= monthEnd;
-    });
-    
-    const monthTransactions = transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.createdAt);
-      return transactionDate >= monthStart && transactionDate <= monthEnd;
-    });
-    
-    const revenue = monthSales.reduce((sum, sale) => sum + sale.total, 0);
-    const income = monthTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0) + revenue;
-    const expenses = monthTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    return {
-      month: format(date, 'MMM', { locale: es }),
-      income,
-      expenses,
-      profit: income - expenses
-    };
-  });
+  // Chart data - using today's data
+  const chartData = [{
+    period: 'Hoy',
+    income: todayIncome,
+    expenses: todayExpenses,
+    profit: netProfit
+  }];
 
-  // Expense categories data
-  const expensesByCategory = currentMonthTransactions
+  // Expense categories data for today
+  const expensesByCategory = todayTransactions
     .filter(t => t.type === 'expense')
     .reduce((acc, transaction) => {
       acc[transaction.category] = (acc[transaction.category] || 0) + transaction.amount;
@@ -181,8 +157,7 @@ export const Finances: React.FC = () => {
 
   const filteredTransactions = transactions.filter(transaction => {
     const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (transaction.reference && transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()));
+                         transaction.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = !typeFilter || transaction.type === typeFilter;
     
     return matchesSearch && matchesType;
@@ -194,9 +169,7 @@ export const Finances: React.FC = () => {
       amount: 0,
       description: '',
       category: '',
-      paymentMethod: 'cash',
-      reference: '',
-      notes: ''
+      paymentMethod: 'cash'
     });
     setIsModalOpen(true);
   };
@@ -211,19 +184,25 @@ export const Finances: React.FC = () => {
     setIsViewModalOpen(true);
   };
 
-  const onSubmit = (data: TransactionFormData) => {
-    if (!user) return;
+  const onSubmit = async (data: TransactionFormData) => {
+    if (!user) {
+      toast.error('Usuario no autenticado');
+      return;
+    }
 
     const transactionData = {
       ...data,
-      reference: data.reference || undefined,
-      notes: data.notes || undefined,
       userId: user.id,
-      user
+      transactionDate: new Date()
     };
 
-    addTransaction(transactionData);
-    handleCloseModal();
+    try {
+      await addTransaction(transactionData);
+      toast.success('Transacción agregada exitosamente');
+      handleCloseModal();
+    } catch (error) {
+      toast.error('Error al agregar la transacción. Por favor, intenta de nuevo.');
+    }
   };
 
   const getTypeLabel = (type: TransactionType) => {
@@ -266,12 +245,10 @@ export const Finances: React.FC = () => {
                 <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Ingresos del Mes</p>
-                <p className="text-2xl font-bold text-gray-900">${currentMonthIncome.toLocaleString()}</p>
-                <p className={`text-sm ${
-                  revenueGrowth >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {revenueGrowth >= 0 ? '+' : ''}{revenueGrowth.toFixed(1)}% vs mes anterior
+                <p className="text-sm font-medium text-gray-600">Ingresos de Hoy</p>
+                <p className="text-2xl font-bold text-gray-900">${todayIncome.toLocaleString()}</p>
+                <p className="text-sm text-gray-500">
+                  Ventas del día
                 </p>
               </div>
             </div>
@@ -285,8 +262,8 @@ export const Finances: React.FC = () => {
                 <TrendingDown className="h-6 w-6 text-red-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Gastos del Mes</p>
-                <p className="text-2xl font-bold text-gray-900">${currentMonthExpenses.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-600">Gastos de Hoy</p>
+                <p className="text-2xl font-bold text-gray-900">${todayExpenses.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -334,40 +311,34 @@ export const Finances: React.FC = () => {
         {/* Revenue Trend */}
         <Card>
           <CardHeader>
-            <CardTitle>Tendencia de Ingresos y Gastos (6 meses)</CardTitle>
+            <CardTitle>Ingresos y Gastos de Hoy</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={last6Months}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
+                <XAxis dataKey="period" />
                 <YAxis />
                 <Tooltip 
                   formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                  labelFormatter={(label) => `Mes: ${label}`}
+                  labelFormatter={(label) => `Período: ${label}`}
                 />
-                <Line 
-                  type="monotone" 
+                <Bar 
                   dataKey="income" 
-                  stroke="#10B981" 
-                  strokeWidth={2}
+                  fill="#10B981" 
                   name="Ingresos"
                 />
-                <Line 
-                  type="monotone" 
+                <Bar 
                   dataKey="expenses" 
-                  stroke="#EF4444" 
-                  strokeWidth={2}
+                  fill="#EF4444" 
                   name="Gastos"
                 />
-                <Line 
-                  type="monotone" 
+                <Bar 
                   dataKey="profit" 
-                  stroke="#3B82F6" 
-                  strokeWidth={2}
+                  fill="#3B82F6" 
                   name="Ganancia"
                 />
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -375,7 +346,7 @@ export const Finances: React.FC = () => {
         {/* Expense Categories */}
         <Card>
           <CardHeader>
-            <CardTitle>Gastos por Categoría (Mes Actual)</CardTitle>
+            <CardTitle>Gastos por Categoría (Hoy)</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -469,7 +440,7 @@ export const Finances: React.FC = () => {
                   }`}>
                     {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toLocaleString()}
                   </TableCell>
-                  <TableCell>{transaction.user.name}</TableCell>
+                  <TableCell>{transaction.userId}</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"
@@ -537,27 +508,7 @@ export const Finances: React.FC = () => {
             />
           </div>
 
-          <Input
-            label="Referencia"
-            {...register('reference')}
-            error={errors.reference?.message}
-            placeholder="Número de factura, cheque, etc."
-          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notas
-            </label>
-            <textarea
-              {...register('notes')}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Notas adicionales..."
-            />
-            {errors.notes && (
-              <p className="mt-1 text-sm text-red-600">{errors.notes.message}</p>
-            )}
-          </div>
 
           <ModalFooter>
             <Button type="button" variant="outline" onClick={handleCloseModal}>
@@ -629,21 +580,14 @@ export const Finances: React.FC = () => {
               </div>
             </div>
 
-            {selectedTransaction.reference && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Referencia
-                </label>
-                <p className="text-gray-900">{selectedTransaction.reference}</p>
-              </div>
-            )}
+
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Usuario
                 </label>
-                <p className="text-gray-900">{selectedTransaction.user.name}</p>
+                <p className="text-gray-900">{selectedTransaction.userId}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -655,14 +599,7 @@ export const Finances: React.FC = () => {
               </div>
             </div>
 
-            {selectedTransaction.notes && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas
-                </label>
-                <p className="text-gray-900">{selectedTransaction.notes}</p>
-              </div>
-            )}
+
           </div>
         )}
         <ModalFooter>

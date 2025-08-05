@@ -10,16 +10,16 @@ import {
   Customer,
   Supplier,
   Sale,
-  Order,
   Transaction,
-  AccountReceivable,
-  AccountPayable
+  InventoryItem
 } from '../types'
 import { supabase } from '../lib/supabase'
 import { productService } from '../services/productService'
 import { customerService } from '../services/customerService'
 import { supplierService } from '../services/supplierService'
 import { saleService } from '../services/saleService'
+import { inventoryService } from '../services/inventoryService'
+import { transactionService } from '../services/transactionService'
 
 // Auth Store con Supabase
 export const useAuthStore = create<AuthState>()(persist(
@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthState>()(persist(
               id: data.user.id,
               email: data.user.email!,
               name: data.user.user_metadata?.name || 'Usuario',
-              role: 'worker' as UserRole,
+              role: 'employee' as UserRole,
               isActive: true,
               createdAt: new Date(),
               updatedAt: new Date()
@@ -103,7 +103,7 @@ export const useAuthStore = create<AuthState>()(persist(
               id: data.user.id,
               email: userData.email,
               name: userData.name,
-              role: userData.role || 'worker' as UserRole,
+              role: userData.role || 'employee' as UserRole,
               is_active: true
             })
           
@@ -242,6 +242,7 @@ interface ProductsState {
   deleteProduct: (id: string) => Promise<void>
   getProduct: (id: string) => Product | undefined
   searchProducts: (query: string) => Promise<Product[]>
+  getLowStockProducts: () => Product[]
 }
 
 export const useProductsStore = create<ProductsState>()((set, get) => ({
@@ -306,7 +307,12 @@ export const useProductsStore = create<ProductsState>()((set, get) => ({
       console.error('Error al buscar productos:', error)
       return []
     }
-  }
+  },
+  getLowStockProducts: () => {
+     // Esta función necesita ser reimplementada para usar la tabla inventory
+     // Por ahora retornamos un array vacío
+     return []
+   }
 }))
 
 // Customers Store con Supabase
@@ -476,6 +482,7 @@ interface SalesState {
   getSale: (id: string) => Sale | undefined
   getSalesByDateRange: (startDate: string, endDate: string) => Promise<Sale[]>
   cancelSale: (id: string) => Promise<void>
+  getTodaySales: () => Sale[]
 }
 
 export const useSalesStore = create<SalesState>()((set, get) => ({
@@ -542,5 +549,213 @@ export const useSalesStore = create<SalesState>()((set, get) => ({
       set({ error: error.message, loading: false })
       throw error
     }
+  },
+  getTodaySales: () => {
+    const today = new Date()
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+    
+    return get().sales.filter(sale => {
+      const saleDate = new Date(sale.createdAt)
+      return saleDate >= startOfDay && saleDate < endOfDay
+    })
+  }
+}))
+
+// Inventory Store con Supabase
+interface InventoryState {
+  inventory: InventoryItem[]
+  loading: boolean
+  error: string | null
+  fetchInventory: () => Promise<void>
+  addInventoryItem: (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdated'>) => Promise<void>
+  updateInventoryItem: (id: string, item: Partial<InventoryItem>) => Promise<void>
+  deleteInventoryItem: (id: string) => Promise<void>
+  getInventoryItem: (id: string) => InventoryItem | undefined
+  getInventoryByProductId: (productId: string) => InventoryItem | undefined
+  updateStock: (productId: string, quantity: number) => Promise<void>
+  getLowStockItems: () => Promise<InventoryItem[]>
+}
+
+export const useInventoryStore = create<InventoryState>()((set, get) => ({
+  inventory: [],
+  loading: false,
+  error: null,
+  fetchInventory: async () => {
+    set({ loading: true, error: null })
+    try {
+      const inventory = await inventoryService.getAll()
+      set({ inventory, loading: false })
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+    }
+  },
+  addInventoryItem: async (itemData) => {
+    set({ loading: true, error: null })
+    try {
+      const item = await inventoryService.create(itemData)
+      set(state => ({ 
+        inventory: [...state.inventory, item], 
+        loading: false 
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  updateInventoryItem: async (id, itemData) => {
+    set({ loading: true, error: null })
+    try {
+      const item = await inventoryService.update(id, itemData)
+      set(state => ({
+        inventory: state.inventory.map(i => i.id === id ? item : i),
+        loading: false
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  deleteInventoryItem: async (id) => {
+    set({ loading: true, error: null })
+    try {
+      await inventoryService.delete(id)
+      set(state => ({
+        inventory: state.inventory.filter(i => i.id !== id),
+        loading: false
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  getInventoryItem: (id) => {
+    return get().inventory.find(i => i.id === id)
+  },
+  getInventoryByProductId: (productId) => {
+    return get().inventory.find(i => i.productId === productId)
+  },
+  updateStock: async (productId, quantity) => {
+    set({ loading: true, error: null })
+    try {
+      await inventoryService.updateStock(productId, quantity)
+      // Actualizar el estado local
+      set(state => ({
+        inventory: state.inventory.map(i => 
+          i.productId === productId ? { ...i, quantity } : i
+        ),
+        loading: false
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  getLowStockItems: async () => {
+    try {
+      return await inventoryService.getLowStock()
+    } catch (error) {
+      console.error('Error al obtener productos con stock bajo:', error)
+      return []
+    }
+  }
+}))
+
+// Transactions Store con Supabase
+interface TransactionsState {
+  transactions: Transaction[]
+  loading: boolean
+  error: string | null
+  fetchTransactions: () => Promise<void>
+  fetchTodayTransactions: () => Promise<void>
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>
+  deleteTransaction: (id: string) => Promise<void>
+  getTransaction: (id: string) => Transaction | undefined
+  getTransactionsByDateRange: (startDate: string, endDate: string) => Promise<Transaction[]>
+  getTodayTransactions: () => Transaction[]
+}
+
+export const useTransactionsStore = create<TransactionsState>()((set, get) => ({
+  transactions: [],
+  loading: false,
+  error: null,
+  fetchTransactions: async () => {
+    set({ loading: true, error: null })
+    try {
+      const transactions = await transactionService.getAll()
+      set({ transactions, loading: false })
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+    }
+  },
+  fetchTodayTransactions: async () => {
+    set({ loading: true, error: null })
+    try {
+      const transactions = await transactionService.getToday()
+      set({ transactions, loading: false })
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+    }
+  },
+  addTransaction: async (transactionData) => {
+    set({ loading: true, error: null })
+    try {
+      const transaction = await transactionService.create(transactionData)
+      set(state => ({ 
+        transactions: [...state.transactions, transaction], 
+        loading: false 
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  updateTransaction: async (id, transactionData) => {
+    set({ loading: true, error: null })
+    try {
+      const transaction = await transactionService.update(id, transactionData)
+      set(state => ({
+        transactions: state.transactions.map(t => t.id === id ? transaction : t),
+        loading: false
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  deleteTransaction: async (id) => {
+    set({ loading: true, error: null })
+    try {
+      await transactionService.delete(id)
+      set(state => ({
+        transactions: state.transactions.filter(t => t.id !== id),
+        loading: false
+      }))
+    } catch (error: any) {
+      set({ error: error.message, loading: false })
+      throw error
+    }
+  },
+  getTransaction: (id) => {
+    return get().transactions.find(t => t.id === id)
+  },
+  getTransactionsByDateRange: async (startDate, endDate) => {
+    try {
+      return await transactionService.getByDateRange(startDate, endDate)
+    } catch (error) {
+      console.error('Error al obtener transacciones por rango de fechas:', error)
+      return []
+    }
+  },
+  getTodayTransactions: () => {
+    const today = new Date()
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+    
+    return get().transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.transactionDate || transaction.createdAt)
+      return transactionDate >= startOfDay && transactionDate < endOfDay
+    })
   }
 }))

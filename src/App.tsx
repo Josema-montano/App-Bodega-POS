@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'sonner';
 import { useAuthStore } from './store';
 import { useSupabaseInit, useSupabaseAuth } from './hooks/useSupabaseInit';
+import { useNotifications } from './hooks/useNotifications';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -35,9 +36,12 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  // Inicializar Supabase y cargar datos
-  useSupabaseInit();
+  // Inicializar autenticación con Supabase
   useSupabaseAuth();
+  // Inicializar datos cuando esté autenticado
+  useSupabaseInit();
+  // Inicializar notificaciones
+  useNotifications();
   
   return (
     <Router>

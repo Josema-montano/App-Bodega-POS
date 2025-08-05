@@ -1,5 +1,8 @@
 import { supabase, handleSupabaseError } from '../lib/supabase'
 import type { Sale, SaleItem } from '../types'
+import { inventoryService } from './inventoryService'
+import { transactionService } from './transactionService'
+import { useAppStore } from '../store'
 
 export const saleService = {
   // Obtener todas las ventas
@@ -43,8 +46,8 @@ export const saleService = {
         paymentMethod: item.payment_method,
         status: item.status,
         notes: item.notes,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at
+        createdAt: new Date(item.created_at),
+        updatedAt: new Date(item.updated_at)
       })) || []
     } catch (error) {
       handleSupabaseError(error)
@@ -94,8 +97,8 @@ export const saleService = {
         paymentMethod: data.payment_method,
         status: data.status,
         notes: data.notes,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at)
       }
     } catch (error) {
       handleSupabaseError(error)
@@ -139,7 +142,41 @@ export const saleService = {
           .insert(saleItems)
         
         if (itemsError) throw itemsError
+
+        // Reducir stock en inventario para cada producto vendido
+        for (const item of sale.items) {
+          try {
+            // Reducir el stock usando cantidad negativa
+            await inventoryService.updateStock(item.productId, -item.quantity)
+          } catch (inventoryError) {
+            console.error(`Error al actualizar stock para producto ${item.productId}:`, inventoryError)
+            // No lanzamos el error para no fallar toda la venta, pero lo registramos
+          }
+        }
       }
+
+      // Registrar transacción automática de ingreso por la venta
+      try {
+        await transactionService.createSaleTransaction(
+          saleData.id,
+          sale.totalAmount,
+          sale.userId,
+          sale.paymentMethod
+        )
+      } catch (transactionError) {
+        console.error('Error al registrar transacción de venta:', transactionError)
+        // No lanzamos el error para no fallar toda la venta
+      }
+
+      // Crear notificación de venta completada
+      const { addNotification } = useAppStore.getState();
+      addNotification({
+        type: 'success',
+        title: 'Venta Completada',
+        message: `Nueva venta registrada por $${sale.totalAmount.toLocaleString()} con ${sale.items?.length || 0} producto(s).`,
+        priority: 'medium',
+        read: false
+      });
 
       // Obtener la venta completa con relaciones
       return await this.getById(saleData.id) as Sale
@@ -233,8 +270,8 @@ export const saleService = {
         paymentMethod: item.payment_method,
         status: item.status,
         notes: item.notes,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at
+        createdAt: new Date(item.created_at),
+        updatedAt: new Date(item.updated_at)
       })) || []
     } catch (error) {
       handleSupabaseError(error)

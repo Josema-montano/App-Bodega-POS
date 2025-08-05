@@ -12,9 +12,7 @@ import { toast } from 'sonner';
 
 const profileSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
-  email: z.string().email('Email inválido'),
-  phone: z.string().optional(),
-  position: z.string().optional()
+  email: z.string().email('Email inválido')
 });
 
 const passwordSchema = z.object({
@@ -65,9 +63,7 @@ export const Settings: React.FC = () => {
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: user?.name || '',
-      email: user?.email || '',
-      phone: user?.phone || '',
-      position: user?.position || ''
+      email: user?.email || ''
     }
   });
 
@@ -95,11 +91,7 @@ export const Settings: React.FC = () => {
   const onProfileSubmit = (data: ProfileFormData) => {
     if (!user) return;
     
-    updateProfile({
-      ...data,
-      phone: data.phone || undefined,
-      position: data.position || undefined
-    });
+    updateProfile(data);
     
     toast.success('Perfil actualizado correctamente');
   };
@@ -182,19 +174,6 @@ export const Settings: React.FC = () => {
                   error={profileForm.formState.errors.email?.message}
                 />
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Teléfono"
-                  {...profileForm.register('phone')}
-                  error={profileForm.formState.errors.phone?.message}
-                />
-                <Input
-                  label="Cargo/Posición"
-                  {...profileForm.register('position')}
-                  error={profileForm.formState.errors.position?.message}
-                />
-              </div>
 
               <div className="pt-4">
                 <Button type="submit">
@@ -264,23 +243,15 @@ export const Settings: React.FC = () => {
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                     user?.role === 'admin' ? 'bg-red-100 text-red-800' :
-                    user?.role === 'worker' ? 'bg-blue-100 text-blue-800' :
+                    user?.role === 'employee' ? 'bg-blue-100 text-blue-800' :
                     'bg-green-100 text-green-800'
                   }`}>
                     {user?.role === 'admin' ? 'Administrador' :
-                     user?.role === 'worker' ? 'Trabajador' : 'Distribuidor'}
+                     user?.role === 'employee' ? 'Empleado' : 'Otro'}
                   </span>
                 </div>
                 
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <h4 className="font-medium text-gray-900">Último Acceso</h4>
-                    <p className="text-sm text-gray-600">Fecha de tu última sesión</p>
-                  </div>
-                  <span className="text-sm text-gray-900">
-                    {user?.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Primera vez'}
-                  </span>
-                </div>
+
               </div>
             </CardContent>
           </Card>

@@ -3,16 +3,13 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  phone?: string;
-  position?: string;
   role: UserRole;
   isActive: boolean;
-  lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export type UserRole = 'admin' | 'worker' | 'distributor';
+export type UserRole = 'admin' | 'employee';
 
 export interface AuthState {
   user: User | null;
@@ -34,27 +31,28 @@ export interface RegisterData {
 export interface Product {
   id: string;
   name: string;
-  description: string;
-  category: ProductCategory;
+  description?: string | null;
   price: number;
   cost: number;
-  stock: number;
-  minStock: number;
-  unit: string;
-  barcode?: string;
+  category: string;
+  brand?: string | null;
+  sku: string;
+  barcode?: string | null;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export type ProductCategory = 'wine' | 'supplies' | 'equipment' | 'packaging';
-
 export interface InventoryItem {
   id: string;
   productId: string;
-  product: Product;
   quantity: number;
-  location: string;
+  minStock?: number;
+  maxStock?: number;
+  location?: string;
   lastUpdated: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Tipos de clientes
@@ -64,39 +62,22 @@ export interface Customer {
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  type: CustomerType;
-  taxId?: string;
-  creditLimit: number;
   currentDebt: number;
-  notes?: string;
+  creditLimit: number;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
-
-export type CustomerType = 'individual' | 'business';
 
 // Tipos de proveedores
 export interface Supplier {
   id: string;
   name: string;
+  contactPerson?: string;
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  taxId?: string;
-  contactPerson?: string;
-  contactName?: string;
-  website?: string;
-  category?: string;
-  paymentTerms: number;
-  currentDebt: number;
-  notes?: string;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -109,13 +90,11 @@ export interface Sale {
   userId: string;
   user: User;
   items: SaleItem[];
-  subtotal: number;
-  tax: number;
+  totalAmount: number; // Cambiado de 'total' a 'totalAmount' para coincidir con 'total_amount' en DB
   discount: number;
-  total: number;
+  tax: number;
   paymentMethod: PaymentMethod;
   status: SaleStatus;
-  invoiceNumber: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -126,43 +105,14 @@ export interface SaleItem {
   productId: string;
   product: Product;
   quantity: number;
-  unitPrice: number;
-  discount: number;
-  total: number;
+  unitPrice: number; // Coincide con 'unit_price' en DB
+  total: number; // Coincide con 'total' en DB
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'credit';
+export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'credit' | 'check';
 export type SaleStatus = 'pending' | 'completed' | 'cancelled' | 'refunded';
 
-// Tipos de pedidos
-export interface Order {
-  id: string;
-  customerId: string;
-  customer: Customer;
-  userId: string;
-  user: User;
-  items: OrderItem[];
-  subtotal: number;
-  tax: number;
-  discount: number;
-  total: number;
-  status: OrderStatus;
-  deliveryDate: Date;
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
-export interface OrderItem {
-  id: string;
-  productId: string;
-  product: Product;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-}
-
-export type OrderStatus = 'pending' | 'confirmed' | 'in_production' | 'ready' | 'delivered' | 'cancelled';
 
 // Tipos financieros
 export interface Transaction {
@@ -171,12 +121,11 @@ export interface Transaction {
   category: string;
   amount: number;
   description: string;
-  reference?: string;
-  paymentMethod: string;
-  notes?: string;
+  referenceId?: string;
+  referenceType?: string;
+  paymentMethod?: PaymentMethod;
   userId: string;
-  user: User;
-  relatedId?: string; // ID de venta, compra, etc.
+  transactionDate: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -184,51 +133,21 @@ export interface Transaction {
 export type TransactionType = 'income' | 'expense';
 export type TransactionCategory = 'sales' | 'purchases' | 'fixed_costs' | 'variable_costs' | 'other';
 
-// Tipos de cuentas por cobrar/pagar
-export interface AccountReceivable {
-  id: string;
-  customerId: string;
-  customer: Customer;
-  amount: number;
-  dueDate: Date;
-  status: DebtStatus;
-  description: string;
-  saleId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
-export interface AccountPayable {
-  id: string;
-  supplierId: string;
-  supplier: Supplier;
-  amount: number;
-  dueDate: Date;
-  status: DebtStatus;
-  description: string;
-  purchaseId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export type DebtStatus = 'pending' | 'partial' | 'paid' | 'overdue';
 
 // Tipos de notificaciones
 export interface Notification {
   id: string;
-  type: NotificationType;
+  userId?: string;
+  type: string;
   title: string;
   message: string;
   priority: NotificationPriority;
   read: boolean;
-  userId?: string;
-  relatedId?: string;
-  data?: any;
   createdAt: Date;
 }
 
-export type NotificationType = 'low_stock' | 'order_due' | 'payment_due' | 'system' | 'alert' | 'success' | 'info' | 'warning' | 'error';
-export type NotificationPriority = 'low' | 'medium' | 'high' | 'critical';
+export type NotificationPriority = 'low' | 'medium' | 'high';
 
 // Tipos de reportes
 export interface SalesReport {
@@ -271,13 +190,12 @@ export interface CategoryData {
 // Tipos de formularios
 export interface ProductFormData {
   name: string;
-  description: string;
-  category: ProductCategory;
+  description?: string;
+  category: string;
+  brand?: string;
+  sku: string;
   price: number;
   cost: number;
-  stock: number;
-  minStock: number;
-  unit: string;
   barcode?: string;
 }
 
@@ -286,31 +204,15 @@ export interface CustomerFormData {
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  type: CustomerType;
-  taxId?: string;
   creditLimit: number;
-  notes?: string;
 }
 
 export interface SupplierFormData {
   name: string;
+  contactPerson?: string;
   email?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  taxId?: string;
-  contactPerson?: string;
-  contactName?: string;
-  website?: string;
-  category?: string;
-  paymentTerms: number;
-  notes?: string;
 }
 
 export interface SaleFormData {
@@ -319,11 +221,20 @@ export interface SaleFormData {
     productId: string;
     quantity: number;
     unitPrice: number;
-    discount: number;
   }[];
   discount: number;
   paymentMethod: PaymentMethod;
   notes?: string;
+}
+
+export interface TransactionFormData {
+  type: TransactionType;
+  category: string;
+  amount: number;
+  description: string;
+  referenceId?: string;
+  referenceType?: string;
+  paymentMethod?: PaymentMethod;
 }
 
 // Tipos de estado global

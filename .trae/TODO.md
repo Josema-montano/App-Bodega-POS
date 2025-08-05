@@ -1,0 +1,15 @@
+# TODO:
+
+- [x] dashboard-init: Agregar useEffect en Dashboard para cargar datos iniciales (productos, clientes, ventas) (priority: High)
+- [x] inventory-init: Agregar useEffect en página Inventory para cargar productos al montar componente (priority: High)
+- [x] sales-init: Agregar useEffect en página Sales para cargar ventas, productos y clientes (priority: High)
+- [x] customers-init: Agregar useEffect en página Customers para cargar clientes al montar componente (priority: High)
+- [x] suppliers-init: Agregar useEffect en página Suppliers para cargar proveedores al montar componente (priority: High)
+- [x] transaction-system: Crear sistema completo de transacciones integrado con Supabase (priority: High)
+- [x] expense-recording: Implementar registro automático de gastos en transacciones (priority: High)
+- [x] dashboard-metrics: Actualizar métricas del dashboard para mostrar solo datos de hoy (priority: High)
+- [x] complete-services: Verificar y completar servicios faltantes (supplierService métodos) (priority: Medium)
+- [x] loading-error-handling: Agregar manejo de estados de carga y errores en todas las páginas (priority: Medium)
+- [x] test-crud: Probar funcionalidades CRUD en todas las páginas principales (priority: Medium)
+- [x] check-typescript: Ejecutar npm run check para verificar que no hay errores de TypeScript (priority: Low)
+- [x] test-app: Iniciar servidor de desarrollo y verificar que todo funciona correctamente (priority: Low)

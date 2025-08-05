@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
 import { Modal, ModalFooter } from '../components/ui/Modal';
 import { useAppStore, useAuthStore } from '../store';
-import { Notification, NotificationType } from '../types';
+import { Notification } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -48,7 +48,7 @@ export const Notifications: React.FC = () => {
     return notificationDate.toDateString() === today.toDateString();
   }).length;
 
-  const getNotificationIcon = (type: NotificationType) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'info':
         return <Info className="h-5 w-5 text-blue-500" />;
@@ -63,7 +63,7 @@ export const Notifications: React.FC = () => {
     }
   };
 
-  const getNotificationBgColor = (type: NotificationType, read: boolean) => {
+  const getNotificationBgColor = (type: string, read: boolean) => {
     const opacity = read ? '50' : '100';
     switch (type) {
       case 'info':
@@ -79,7 +79,7 @@ export const Notifications: React.FC = () => {
     }
   };
 
-  const getTypeLabel = (type: NotificationType) => {
+  const getTypeLabel = (type: string) => {
     const typeMap = {
       info: 'Información',
       warning: 'Advertencia',
@@ -361,16 +361,7 @@ export const Notifications: React.FC = () => {
               </div>
             </div>
 
-            {selectedNotification.data && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Datos Adicionales
-                </label>
-                <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
-                  {JSON.stringify(selectedNotification.data, null, 2)}
-                </pre>
-              </div>
-            )}
+
           </div>
         )}
         <ModalFooter>

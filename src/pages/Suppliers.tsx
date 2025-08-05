@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Eye, Mail, Phone, MapPin, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -17,44 +17,26 @@ import { es } from 'date-fns/locale';
 
 const supplierSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
-  contactName: z.string().min(1, 'El nombre de contacto es requerido'),
+  contactPerson: z.string().min(1, 'La persona de contacto es requerida'),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   phone: z.string().min(1, 'El teléfono es requerido'),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  country: z.string().optional(),
-  taxId: z.string().optional(),
-  paymentTerms: z.string().optional(),
-  category: z.string().optional(),
-  website: z.string().optional(),
-  notes: z.string().optional()
+  address: z.string().optional()
 });
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
-const categoryOptions = [
-  { value: '', label: 'Seleccionar categoría' },
-  { value: 'wines', label: 'Vinos' },
-  { value: 'spirits', label: 'Licores' },
-  { value: 'accessories', label: 'Accesorios' },
-  { value: 'packaging', label: 'Embalaje' },
-  { value: 'equipment', label: 'Equipamiento' },
-  { value: 'services', label: 'Servicios' },
-  { value: 'other', label: 'Otros' }
-];
-
-const categoryFilterOptions = [
-  { value: '', label: 'Todas las categorías' },
-  ...categoryOptions.slice(1)
-];
+// Removed category options as category field doesn't exist in schema
 
 export const Suppliers: React.FC = () => {
-  const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliersStore();
+  const { suppliers, addSupplier, updateSupplier, deleteSupplier, fetchSuppliers, loading, error } = useSuppliersStore();
+
+  // Cargar proveedores al montar el componente
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
   const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  // Removed categoryFilter as category field doesn't exist in schema
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -67,65 +49,39 @@ export const Suppliers: React.FC = () => {
     reset,
     formState: { errors }
   } = useForm<SupplierFormData>({
-    resolver: zodResolver(supplierSchema),
-    defaultValues: {
-      category: ''
-    }
+    resolver: zodResolver(supplierSchema)
   });
 
   const filteredSuppliers = suppliers.filter(supplier => {
     const matchesSearch = supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         supplier.contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          supplier.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          supplier.phone.includes(searchTerm);
-    const matchesCategory = !categoryFilter || supplier.category === categoryFilter;
     
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   const totalSuppliers = suppliers.length;
-  const categoryCounts = suppliers.reduce((acc, supplier) => {
-    const category = supplier.category || 'other';
-    acc[category] = (acc[category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const activeSuppliers = suppliers.filter(s => s.isActive).length;
 
   const handleOpenModal = (supplier?: Supplier) => {
     if (supplier) {
       setSelectedSupplier(supplier);
       reset({
         name: supplier.name,
-        contactName: supplier.contactName,
+        contactPerson: supplier.contactPerson,
         email: supplier.email || '',
         phone: supplier.phone,
-        address: supplier.address || '',
-        city: supplier.city || '',
-        state: supplier.state || '',
-        zipCode: supplier.zipCode || '',
-        country: supplier.country || '',
-        taxId: supplier.taxId || '',
-        paymentTerms: supplier.paymentTerms?.toString() || '',
-        category: supplier.category || '',
-        website: supplier.website || '',
-        notes: supplier.notes || ''
+        address: supplier.address || ''
       });
     } else {
       setSelectedSupplier(null);
       reset({
         name: '',
-        contactName: '',
+        contactPerson: '',
         email: '',
         phone: '',
-        address: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        country: '',
-        taxId: '',
-        paymentTerms: '',
-        category: '',
-        website: '',
-        notes: ''
+        address: ''
       });
     }
     setIsModalOpen(true);
@@ -160,16 +116,7 @@ export const Suppliers: React.FC = () => {
       ...data,
       email: data.email || undefined,
       address: data.address || undefined,
-      city: data.city || undefined,
-      state: data.state || undefined,
-      zipCode: data.zipCode || undefined,
-      country: data.country || undefined,
-      taxId: data.taxId || undefined,
-      paymentTerms: Number(data.paymentTerms) || 0,
-      category: data.category || undefined,
-      website: data.website || undefined,
-      notes: data.notes || undefined,
-      currentDebt: 0
+      isActive: true
     };
 
     if (selectedSupplier) {
@@ -180,12 +127,37 @@ export const Suppliers: React.FC = () => {
     handleCloseModal();
   };
 
-  const getCategoryLabel = (category?: string) => {
-    return categoryOptions.find(opt => opt.value === category)?.label || 'Sin categoría';
-  };
+  // Removed getCategoryLabel function as category field doesn't exist in schema
 
-  const canEdit = user?.role === 'admin' || user?.role === 'worker';
+  const canEdit = user?.role === 'admin' || user?.role === 'employee';
   const canDelete = user?.role === 'admin';
+
+  // Mostrar estado de carga
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando proveedores...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si existe
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <Package className="h-12 w-12 mx-auto" />
+          </div>
+          <p className="text-red-600 mb-4">Error al cargar proveedores: {error}</p>
+          <Button onClick={() => fetchSuppliers()}>Reintentar</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -226,8 +198,8 @@ export const Suppliers: React.FC = () => {
                 <MapPin className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Vinos</p>
-                <p className="text-2xl font-bold text-gray-900">{categoryCounts.wines || 0}</p>
+                <p className="text-sm font-medium text-gray-600">Activos</p>
+                <p className="text-2xl font-bold text-gray-900">{activeSuppliers}</p>
               </div>
             </div>
           </CardContent>
@@ -240,8 +212,8 @@ export const Suppliers: React.FC = () => {
                 <Mail className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Licores</p>
-                <p className="text-2xl font-bold text-gray-900">{categoryCounts.spirits || 0}</p>
+                <p className="text-sm font-medium text-gray-600">Con Email</p>
+                <p className="text-2xl font-bold text-gray-900">{suppliers.filter(s => s.email).length}</p>
               </div>
             </div>
           </CardContent>
@@ -254,8 +226,8 @@ export const Suppliers: React.FC = () => {
                 <Phone className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Accesorios</p>
-                <p className="text-2xl font-bold text-gray-900">{categoryCounts.accessories || 0}</p>
+                <p className="text-sm font-medium text-gray-600">Con Dirección</p>
+                <p className="text-2xl font-bold text-gray-900">{suppliers.filter(s => s.address).length}</p>
               </div>
             </div>
           </CardContent>
@@ -277,13 +249,7 @@ export const Suppliers: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="w-full sm:w-48">
-              <Select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                options={categoryFilterOptions}
-              />
-            </div>
+            {/* Removed category filter as category field doesn't exist in schema */}
           </div>
         </CardContent>
       </Card>
@@ -299,10 +265,10 @@ export const Suppliers: React.FC = () => {
               <TableRow>
                 <TableHead>Empresa</TableHead>
                 <TableHead>Contacto</TableHead>
-                <TableHead>Categoría</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>Ciudad</TableHead>
+                <TableHead>Dirección</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead>Fecha Registro</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
@@ -311,15 +277,17 @@ export const Suppliers: React.FC = () => {
               {filteredSuppliers.map((supplier) => (
                 <TableRow key={supplier.id}>
                   <TableCell className="font-medium">{supplier.name}</TableCell>
-                  <TableCell>{supplier.contactName}</TableCell>
-                  <TableCell>
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {getCategoryLabel(supplier.category)}
-                    </span>
-                  </TableCell>
+                  <TableCell>{supplier.contactPerson}</TableCell>
                   <TableCell>{supplier.email || '-'}</TableCell>
                   <TableCell>{supplier.phone}</TableCell>
-                  <TableCell>{supplier.city || '-'}</TableCell>
+                  <TableCell>{supplier.address || '-'}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      supplier.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {supplier.isActive ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     {format(new Date(supplier.createdAt), 'dd/MM/yyyy', { locale: es })}
                   </TableCell>
@@ -380,9 +348,9 @@ export const Suppliers: React.FC = () => {
               error={errors.name?.message}
             />
             <Input
-              label="Nombre de Contacto *"
-              {...register('contactName')}
-              error={errors.contactName?.message}
+              label="Persona de Contacto *"
+              {...register('contactPerson')}
+              error={errors.contactPerson?.message}
             />
           </div>
 
@@ -406,64 +374,7 @@ export const Suppliers: React.FC = () => {
             error={errors.address?.message}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Input
-              label="Ciudad"
-              {...register('city')}
-              error={errors.city?.message}
-            />
-            <Input
-              label="Estado"
-              {...register('state')}
-              error={errors.state?.message}
-            />
-            <Input
-              label="Código Postal"
-              {...register('zipCode')}
-              error={errors.zipCode?.message}
-            />
-            <Input
-              label="País"
-              {...register('country')}
-              error={errors.country?.message}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="RFC/Tax ID"
-              {...register('taxId')}
-              error={errors.taxId?.message}
-            />
-            <Select
-              label="Categoría"
-              {...register('category')}
-              options={categoryOptions}
-              error={errors.category?.message}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Términos de Pago"
-              {...register('paymentTerms')}
-              error={errors.paymentTerms?.message}
-              placeholder="ej: 30 días"
-            />
-            <Input
-              label="Sitio Web"
-              {...register('website')}
-              error={errors.website?.message}
-              placeholder="https://..."
-            />
-          </div>
-
-          <Textarea
-            label="Notas"
-            {...register('notes')}
-            error={errors.notes?.message}
-            rows={3}
-          />
+          {/* Removed fields that don't exist in schema: city, state, zipCode, country, taxId, category, paymentTerms, website, notes */}
 
           <ModalFooter>
             <Button type="button" variant="outline" onClick={handleCloseModal}>
@@ -496,7 +407,7 @@ export const Suppliers: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contacto
                 </label>
-                <p className="text-gray-900">{selectedSupplier.contactName}</p>
+                <p className="text-gray-900">{selectedSupplier.contactPerson}</p>
               </div>
             </div>
 
@@ -517,10 +428,12 @@ export const Suppliers: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoría
+                Estado
               </label>
-              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {getCategoryLabel(selectedSupplier.category)}
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                selectedSupplier.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              }`}>
+                {selectedSupplier.isActive ? 'Activo' : 'Inactivo'}
               </span>
             </div>
 
@@ -530,64 +443,6 @@ export const Suppliers: React.FC = () => {
                   Dirección
                 </label>
                 <p className="text-gray-900">{selectedSupplier.address}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ciudad
-                </label>
-                <p className="text-gray-900">{selectedSupplier.city || 'No especificada'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estado
-                </label>
-                <p className="text-gray-900">{selectedSupplier.state || 'No especificado'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Código Postal
-                </label>
-                <p className="text-gray-900">{selectedSupplier.zipCode || 'No especificado'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  País
-                </label>
-                <p className="text-gray-900">{selectedSupplier.country || 'No especificado'}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  RFC/Tax ID
-                </label>
-                <p className="text-gray-900">{selectedSupplier.taxId || 'No especificado'}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Términos de Pago
-                </label>
-                <p className="text-gray-900">{selectedSupplier.paymentTerms || 'No especificados'}</p>
-              </div>
-            </div>
-
-            {selectedSupplier.website && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sitio Web
-                </label>
-                <a 
-                  href={selectedSupplier.website} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  {selectedSupplier.website}
-                </a>
               </div>
             )}
 
@@ -610,14 +465,7 @@ export const Suppliers: React.FC = () => {
               </div>
             </div>
 
-            {selectedSupplier.notes && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas
-                </label>
-                <p className="text-gray-900">{selectedSupplier.notes}</p>
-              </div>
-            )}
+            {/* Removed notes field as it doesn't exist in schema */}
           </div>
         )}
         <ModalFooter>

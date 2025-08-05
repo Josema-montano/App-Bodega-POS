@@ -1,30 +1,32 @@
-import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { Modal, ModalFooter } from '../components/ui/Modal';
-import { useProductsStore } from '../store';
-import { Product, ProductCategory } from '../types';
+import { useProductsStore, useInventoryStore } from '../store';
+import { Product, InventoryItem } from '../types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
-const productSchema = z.object({
-  name: z.string().min(1, 'El nombre es requerido'),
-  description: z.string().min(1, 'La descripción es requerida'),
-  category: z.enum(['wine', 'supplies', 'equipment', 'packaging']),
-  price: z.number().min(0, 'El precio debe ser mayor a 0'),
-  cost: z.number().min(0, 'El costo debe ser mayor a 0'),
-  stock: z.number().min(0, 'El stock debe ser mayor o igual a 0'),
+const inventorySchema = z.object({
+  productId: z.string().min(1, 'Debe seleccionar un producto'),
+  quantity: z.number().min(0, 'La cantidad debe ser mayor o igual a 0'),
   minStock: z.number().min(0, 'El stock mínimo debe ser mayor o igual a 0'),
-  unit: z.string().min(1, 'La unidad es requerida'),
-  barcode: z.string().optional()
+  maxStock: z.number().min(0, 'El stock máximo debe ser mayor o igual a 0'),
+  location: z.string().optional()
 });
 
-type ProductFormData = z.infer<typeof productSchema>;
+const stockUpdateSchema = z.object({
+  quantity: z.number().min(0, 'La cantidad debe ser mayor o igual a 0'),
+  reason: z.string().min(1, 'Debe especificar el motivo')
+});
+
+type InventoryFormData = z.infer<typeof inventorySchema>;
+type StockUpdateFormData = z.infer<typeof stockUpdateSchema>;
 
 const categoryOptions = [
   { value: 'wine', label: 'Vinos' },
@@ -34,83 +36,213 @@ const categoryOptions = [
 ];
 
 export const Inventory: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, getLowStockProducts } = useProductsStore();
+  const { products, fetchProducts, loading: productsLoading, error: productsError } = useProductsStore();
+  const { 
+    inventory, 
+    fetchInventory, 
+    addInventoryItem, 
+    updateInventoryItem, 
+    deleteInventoryItem,
+    updateStock,
+    getLowStockItems,
+    loading: inventoryLoading, 
+    error: inventoryError 
+  } = useInventoryStore();
+
+  // Estados locales
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showLowStock, setShowLowStock] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [editingInventory, setEditingInventory] = useState<InventoryItem | null>(null);
+  const [selectedInventory, setSelectedInventory] = useState<InventoryItem | null>(null);
+  const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
 
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    fetchProducts();
+    fetchInventory();
+    loadLowStockItems();
+  }, [fetchProducts, fetchInventory]);
+
+  const loadLowStockItems = async () => {
+    try {
+      const items = await getLowStockItems();
+      setLowStockItems(items);
+    } catch (error) {
+      console.error('Error al cargar productos con stock bajo:', error);
+    }
+  };
+
+  // Formularios
   const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-    setValue
-  } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema)
+    register: registerInventory,
+    handleSubmit: handleSubmitInventory,
+    reset: resetInventory,
+    formState: { errors: inventoryErrors },
+    setValue: setInventoryValue
+  } = useForm<InventoryFormData>({
+    resolver: zodResolver(inventorySchema)
   });
 
-  const lowStockProducts = getLowStockProducts();
+  const {
+    register: registerStock,
+    handleSubmit: handleSubmitStock,
+    reset: resetStock,
+    formState: { errors: stockErrors }
+  } = useForm<StockUpdateFormData>({
+    resolver: zodResolver(stockUpdateSchema)
+  });
 
-  const filteredProducts = products.filter(product => {
+  // Combinar productos con inventario
+  const productsWithInventory = products.map(product => {
+    const inventoryItem = inventory.find(inv => inv.productId === product.id);
+    return {
+      ...product,
+      inventory: inventoryItem
+    };
+  });
+
+  // Filtrar productos
+  const filteredProducts = productsWithInventory.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !categoryFilter || product.category === categoryFilter;
-    const matchesLowStock = !showLowStock || product.stock <= product.minStock;
+    const matchesLowStock = !showLowStock || (product.inventory && product.inventory.quantity <= product.inventory.minStock);
     
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 
-  const handleOpenModal = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setValue('name', product.name);
-      setValue('description', product.description);
-      setValue('category', product.category);
-      setValue('price', product.price);
-      setValue('cost', product.cost);
-      setValue('stock', product.stock);
-      setValue('minStock', product.minStock);
-      setValue('unit', product.unit);
-      setValue('barcode', product.barcode || '');
+  // Funciones de manejo
+  const handleOpenInventoryModal = (inventoryItem?: InventoryItem) => {
+    if (inventoryItem) {
+      setEditingInventory(inventoryItem);
+      setInventoryValue('productId', inventoryItem.productId);
+      setInventoryValue('quantity', inventoryItem.quantity);
+      setInventoryValue('minStock', inventoryItem.minStock);
+      setInventoryValue('maxStock', inventoryItem.maxStock || 0);
+      setInventoryValue('location', inventoryItem.location || '');
     } else {
-      setEditingProduct(null);
-      reset();
+      setEditingInventory(null);
+      resetInventory();
     }
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
+  const handleOpenStockModal = (inventoryItem: InventoryItem) => {
+    setSelectedInventory(inventoryItem);
+    resetStock();
+    setIsStockModalOpen(true);
+  };
+
+  const handleCloseModals = () => {
     setIsModalOpen(false);
-    setEditingProduct(null);
-    reset();
+    setIsStockModalOpen(false);
+    setEditingInventory(null);
+    setSelectedInventory(null);
+    resetInventory();
+    resetStock();
   };
 
-  const onSubmit = (data: ProductFormData) => {
-    if (editingProduct) {
-      updateProduct(editingProduct.id, data);
-    } else {
-      addProduct(data);
+  const onSubmitInventory = async (data: InventoryFormData) => {
+    try {
+      if (editingInventory) {
+        await updateInventoryItem(editingInventory.id, data);
+      } else {
+        await addInventoryItem(data);
+      }
+      await loadLowStockItems();
+      handleCloseModals();
+    } catch (error) {
+      console.error('Error al guardar inventario:', error);
     }
-    handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
-      deleteProduct(id);
+  const onSubmitStockUpdate = async (data: StockUpdateFormData) => {
+    if (!selectedInventory) return;
+    
+    try {
+      await updateStock(selectedInventory.productId, data.quantity);
+      await loadLowStockItems();
+      handleCloseModals();
+    } catch (error) {
+      console.error('Error al actualizar stock:', error);
     }
   };
 
-  const getCategoryLabel = (category: ProductCategory) => {
+  const handleDeleteInventory = async (id: string) => {
+    if (confirm('¿Estás seguro de que quieres eliminar este registro de inventario?')) {
+      try {
+        await deleteInventoryItem(id);
+        await loadLowStockItems();
+      } catch (error) {
+        console.error('Error al eliminar inventario:', error);
+      }
+    }
+  };
+
+  const getCategoryLabel = (category: string) => {
     return categoryOptions.find(opt => opt.value === category)?.label || category;
   };
 
-  const getStockStatus = (product: Product) => {
-    if (product.stock === 0) return { label: 'Sin stock', color: 'text-red-600 bg-red-50' };
-    if (product.stock <= product.minStock) return { label: 'Stock bajo', color: 'text-orange-600 bg-orange-50' };
-    return { label: 'En stock', color: 'text-green-600 bg-green-50' };
+  const getStockStatus = (inventoryItem?: InventoryItem) => {
+    if (!inventoryItem) {
+      return { label: 'Sin inventario', color: 'text-gray-600 bg-gray-50' };
+    }
+    
+    if (inventoryItem.quantity === 0) {
+      return { label: 'Agotado', color: 'text-red-600 bg-red-50' };
+    }
+    
+    if (inventoryItem.quantity <= inventoryItem.minStock) {
+      return { label: 'Stock Bajo', color: 'text-orange-600 bg-orange-50' };
+    }
+    
+    return { label: 'Disponible', color: 'text-green-600 bg-green-50' };
   };
+
+  const getProductsWithoutInventory = () => {
+    return products.filter(product => 
+      !inventory.find(inv => inv.productId === product.id)
+    );
+  };
+
+  // Calcular estadísticas
+  const totalValue = inventory.reduce((sum, item) => {
+    const product = products.find(p => p.id === item.productId);
+    return sum + (product ? product.cost * item.quantity : 0);
+  }, 0);
+
+  const loading = productsLoading || inventoryLoading;
+  const error = productsError || inventoryError;
+
+  // Mostrar estado de carga
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando inventario...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si existe
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <AlertTriangle className="h-12 w-12 mx-auto" />
+          </div>
+          <p className="text-red-600 mb-4">Error al cargar inventario: {error}</p>
+          <Button onClick={() => { fetchProducts(); fetchInventory(); }}>Reintentar</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -120,10 +252,12 @@ export const Inventory: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Inventario</h1>
           <p className="text-gray-600">Administra productos, stock y alertas de inventario</p>
         </div>
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Agregar Producto
-        </Button>
+        <div className="flex space-x-2">
+          <Button onClick={() => handleOpenInventoryModal()}>
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar Inventario
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -134,7 +268,7 @@ export const Inventory: React.FC = () => {
               <Package className="h-8 w-8 text-blue-500" />
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Total Productos</p>
-                <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{inventory.length}</p>
               </div>
             </div>
           </CardContent>
@@ -146,7 +280,7 @@ export const Inventory: React.FC = () => {
               <AlertTriangle className="h-8 w-8 text-orange-500" />
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Stock Bajo</p>
-                <p className="text-2xl font-bold text-gray-900">{lowStockProducts.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{lowStockItems.length}</p>
               </div>
             </div>
           </CardContent>
@@ -154,22 +288,28 @@ export const Inventory: React.FC = () => {
         
         <Card>
           <CardContent className="p-4">
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Valor Total Inventario</p>
-              <p className="text-2xl font-bold text-gray-900">
-                ${products.reduce((sum, p) => sum + (p.stock * p.cost), 0).toLocaleString()}
-              </p>
+            <div className="flex items-center">
+              <TrendingUp className="h-8 w-8 text-green-500" />
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Valor Total Inventario</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  ${totalValue.toLocaleString()}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-4">
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Categorías</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {new Set(products.map(p => p.category)).size}
-              </p>
+            <div className="flex items-center">
+              <Package className="h-8 w-8 text-purple-500" />
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-600">Sin Inventario</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {getProductsWithoutInventory().length}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -210,7 +350,7 @@ export const Inventory: React.FC = () => {
       {/* Products Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Productos ({filteredProducts.length})</CardTitle>
+          <CardTitle>Inventario ({filteredProducts.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -218,16 +358,19 @@ export const Inventory: React.FC = () => {
               <TableRow>
                 <TableHead>Producto</TableHead>
                 <TableHead>Categoría</TableHead>
-                <TableHead>Stock</TableHead>
+                <TableHead>Stock Actual</TableHead>
+                <TableHead>Stock Mín/Máx</TableHead>
+                <TableHead>Ubicación</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Costo</TableHead>
+                <TableHead>Valor Stock</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => {
-                const stockStatus = getStockStatus(product);
+                const stockStatus = getStockStatus(product.inventory);
+                const stockValue = product.inventory ? product.cost * product.inventory.quantity : 0;
+                
                 return (
                   <TableRow key={product.id}>
                     <TableCell>
@@ -242,34 +385,74 @@ export const Inventory: React.FC = () => {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{product.stock} {product.unit}</p>
-                        <p className="text-sm text-gray-600">Mín: {product.minStock}</p>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">
+                          {product.inventory ? product.inventory.quantity : 'N/A'}
+                        </span>
+                        {product.inventory && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenStockModal(product.inventory!)}
+                          >
+                            <TrendingUp className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {product.inventory ? (
+                        <span className="text-sm">
+                          {product.inventory.minStock} / {product.inventory.maxStock || 'N/A'}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">
+                        {product.inventory?.location || 'No especificada'}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${stockStatus.color}`}>
                         {stockStatus.label}
                       </span>
                     </TableCell>
-                    <TableCell>${product.price.toFixed(2)}</TableCell>
-                    <TableCell>${product.cost.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <span className="font-medium">${stockValue.toFixed(2)}</span>
+                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenModal(product)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => handleDelete(product.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {product.inventory ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenInventoryModal(product.inventory!)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => handleDeleteInventory(product.inventory!.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => {
+                              setInventoryValue('productId', product.id);
+                              handleOpenInventoryModal();
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -287,91 +470,106 @@ export const Inventory: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Product Modal */}
+      {/* Inventory Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingProduct ? 'Editar Producto' : 'Agregar Producto'}
+        onClose={handleCloseModals}
+        title={editingInventory ? 'Editar Inventario' : 'Agregar Inventario'}
         size="lg"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Nombre del Producto"
-              {...register('name')}
-              error={errors.name?.message}
-            />
-            
-            <Select
-              label="Categoría"
-              options={categoryOptions}
-              {...register('category')}
-              error={errors.category?.message}
-            />
-          </div>
-          
-          <Input
-            label="Descripción"
-            {...register('description')}
-            error={errors.description?.message}
+        <form onSubmit={handleSubmitInventory(onSubmitInventory)} className="space-y-4">
+          <Select
+            label="Producto"
+            options={[
+              { value: '', label: 'Seleccionar producto' },
+              ...products.map(p => ({ value: p.id, label: p.name }))
+            ]}
+            {...registerInventory('productId')}
+            error={inventoryErrors.productId?.message}
+            disabled={!!editingInventory}
           />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Precio de Venta"
-              type="number"
-              step="0.01"
-              {...register('price', { valueAsNumber: true })}
-              error={errors.price?.message}
-            />
-            
-            <Input
-              label="Costo"
-              type="number"
-              step="0.01"
-              {...register('cost', { valueAsNumber: true })}
-              error={errors.cost?.message}
-            />
-          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="Stock Actual"
+              label="Cantidad Actual"
               type="number"
-              {...register('stock', { valueAsNumber: true })}
-              error={errors.stock?.message}
+              {...registerInventory('quantity', { valueAsNumber: true })}
+              error={inventoryErrors.quantity?.message}
             />
             
             <Input
               label="Stock Mínimo"
               type="number"
-              {...register('minStock', { valueAsNumber: true })}
-              error={errors.minStock?.message}
+              {...registerInventory('minStock', { valueAsNumber: true })}
+              error={inventoryErrors.minStock?.message}
             />
             
             <Input
-              label="Unidad"
-              {...register('unit')}
-              error={errors.unit?.message}
-              placeholder="ej: botella, kg, litro"
+              label="Stock Máximo"
+              type="number"
+              {...registerInventory('maxStock', { valueAsNumber: true })}
+              error={inventoryErrors.maxStock?.message}
             />
           </div>
           
           <Input
-            label="Código de Barras (Opcional)"
-            {...register('barcode')}
-            error={errors.barcode?.message}
+            label="Ubicación"
+            {...registerInventory('location')}
+            error={inventoryErrors.location?.message}
+            placeholder="Ej: Bodega A, Estante 1"
           />
           
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={handleCloseModal}>
+            <Button type="button" variant="outline" onClick={handleCloseModals}>
               Cancelar
             </Button>
             <Button type="submit">
-              {editingProduct ? 'Actualizar' : 'Agregar'} Producto
+              {editingInventory ? 'Actualizar' : 'Agregar'} Inventario
             </Button>
           </ModalFooter>
         </form>
+      </Modal>
+
+      {/* Stock Update Modal */}
+      <Modal
+        isOpen={isStockModalOpen}
+        onClose={handleCloseModals}
+        title="Actualizar Stock"
+        size="md"
+      >
+        {selectedInventory && (
+          <form onSubmit={handleSubmitStock(onSubmitStockUpdate)} className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium text-gray-900">
+                {products.find(p => p.id === selectedInventory.productId)?.name}
+              </h3>
+              <p className="text-sm text-gray-600">Stock actual: {selectedInventory.quantity}</p>
+            </div>
+            
+            <Input
+              label="Nueva Cantidad"
+              type="number"
+              {...registerStock('quantity', { valueAsNumber: true })}
+              error={stockErrors.quantity?.message}
+            />
+            
+            <Input
+              label="Motivo del Cambio"
+              {...registerStock('reason')}
+              error={stockErrors.reason?.message}
+              placeholder="Ej: Compra, Venta, Ajuste de inventario"
+            />
+            
+            <ModalFooter>
+              <Button type="button" variant="outline" onClick={handleCloseModals}>
+                Cancelar
+              </Button>
+              <Button type="submit">
+                Actualizar Stock
+              </Button>
+            </ModalFooter>
+          </form>
+        )}
       </Modal>
     </div>
   );

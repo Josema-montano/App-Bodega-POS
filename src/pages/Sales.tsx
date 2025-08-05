@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, ShoppingCart, DollarSign, TrendingUp, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -19,8 +19,7 @@ const saleSchema = z.object({
   items: z.array(z.object({
     productId: z.string().min(1, 'Selecciona un producto'),
     quantity: z.number().min(1, 'La cantidad debe ser mayor a 0'),
-    unitPrice: z.number().min(0, 'El precio debe ser mayor o igual a 0'),
-    discount: z.number().min(0).max(100, 'El descuento debe estar entre 0 y 100')
+    unitPrice: z.number().min(0, 'El precio debe ser mayor o igual a 0')
   })).min(1, 'Agrega al menos un producto'),
   discount: z.number().min(0).max(100, 'El descuento debe estar entre 0 y 100'),
   paymentMethod: z.enum(['cash', 'card', 'transfer', 'credit']),
@@ -45,14 +44,21 @@ const statusOptions = [
 ];
 
 export const Sales: React.FC = () => {
-  const { sales, addSale, getTodaySales } = useSalesStore();
-  const { products } = useProductsStore();
-  const { customers } = useCustomersStore();
+  const { sales, addSale, getTodaySales, fetchSales, loading: salesLoading, error: salesError } = useSalesStore();
+  const { products, fetchProducts, loading: productsLoading, error: productsError } = useProductsStore();
+  const { customers, fetchCustomers, loading: customersLoading, error: customersError } = useCustomersStore();
   const { user } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isNewSaleModalOpen, setIsNewSaleModalOpen] = useState(false);
+
+  // Cargar datos iniciales al montar el componente
+  useEffect(() => {
+    fetchSales();
+    fetchProducts();
+    fetchCustomers();
+  }, [fetchSales, fetchProducts, fetchCustomers]);
 
   const {
     register,
@@ -65,7 +71,7 @@ export const Sales: React.FC = () => {
   } = useForm<SaleFormData>({
     resolver: zodResolver(saleSchema),
     defaultValues: {
-      items: [{ productId: '', quantity: 1, unitPrice: 0, discount: 0 }],
+      items: [{ productId: '', quantity: 1, unitPrice: 0 }],
       discount: 0,
       paymentMethod: 'cash'
     }
@@ -80,11 +86,10 @@ export const Sales: React.FC = () => {
   const watchedDiscount = watch('discount');
 
   const todaySales = getTodaySales();
-  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
+  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
 
   const filteredSales = sales.filter(sale => {
-    const matchesSearch = sale.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         sale.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = sale.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.user.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = !statusFilter || sale.status === statusFilter;
     
@@ -92,9 +97,7 @@ export const Sales: React.FC = () => {
   });
 
   const calculateItemTotal = (item: any) => {
-    const subtotal = item.quantity * item.unitPrice;
-    const discountAmount = subtotal * (item.discount / 100);
-    return subtotal - discountAmount;
+    return item.quantity * item.unitPrice;
   };
 
   const calculateSaleTotal = () => {
@@ -105,7 +108,7 @@ export const Sales: React.FC = () => {
 
   const handleOpenNewSaleModal = () => {
     reset({
-      items: [{ productId: '', quantity: 1, unitPrice: 0, discount: 0 }],
+      items: [{ productId: '', quantity: 1, unitPrice: 0 }],
       discount: 0,
       paymentMethod: 'cash'
     });
@@ -126,14 +129,14 @@ export const Sales: React.FC = () => {
       product: products.find(p => p.id === item.productId)!,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
-      discount: item.discount,
       total: calculateItemTotal(item)
     }));
 
-    const subtotal = saleItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const subtotal = saleItems.reduce((sum, item) => sum + item.total, 0);
     const discountAmount = subtotal * (data.discount / 100);
-    const total = subtotal - discountAmount;
-    const tax = total * 0.16; // 16% IVA
+    const afterDiscount = subtotal - discountAmount;
+    const tax = afterDiscount * 0.16; // 16% IVA
+    const totalAmount = afterDiscount + tax;
 
     const newSale: Omit<Sale, 'id' | 'createdAt' | 'updatedAt'> = {
       customerId: data.customerId || undefined,
@@ -141,13 +144,11 @@ export const Sales: React.FC = () => {
       userId: user.id,
       user,
       items: saleItems,
-      subtotal,
-      tax,
+      totalAmount,
       discount: data.discount,
-      total: total + tax,
+      tax,
       paymentMethod: data.paymentMethod,
       status: 'completed',
-      invoiceNumber: '',
       notes: data.notes
     };
 
@@ -175,6 +176,41 @@ export const Sales: React.FC = () => {
   const getPaymentMethodLabel = (method: PaymentMethod) => {
     return paymentMethodOptions.find(opt => opt.value === method)?.label || method;
   };
+
+  // Mostrar estado de carga
+  const isLoading = salesLoading || productsLoading || customersLoading;
+  const hasError = salesError || productsError || customersError;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando datos de ventas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">
+            <ShoppingCart className="h-12 w-12 mx-auto" />
+          </div>
+          <p className="text-red-600 mb-4">
+            Error al cargar datos: {salesError || productsError || customersError}
+          </p>
+          <Button onClick={() => {
+            fetchSales();
+            fetchProducts();
+            fetchCustomers();
+          }}>Reintentar</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -235,7 +271,7 @@ export const Sales: React.FC = () => {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Promedio Venta</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  ${sales.length > 0 ? (sales.reduce((sum, sale) => sum + sale.total, 0) / sales.length).toFixed(2) : '0.00'}
+                  ${sales.length > 0 ? (sales.reduce((sum, sale) => sum + sale.totalAmount, 0) / sales.length).toFixed(2) : '0.00'}
                 </p>
               </div>
             </div>
@@ -274,7 +310,7 @@ export const Sales: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Factura</TableHead>
+                <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Vendedor</TableHead>
                 <TableHead>Total</TableHead>
@@ -289,10 +325,10 @@ export const Sales: React.FC = () => {
                 const status = getStatusLabel(sale.status);
                 return (
                   <TableRow key={sale.id}>
-                    <TableCell className="font-medium">{sale.invoiceNumber}</TableCell>
+                    <TableCell className="font-medium">#{sale.id}</TableCell>
                     <TableCell>{sale.customer?.name || 'Cliente General'}</TableCell>
                     <TableCell>{sale.user.name}</TableCell>
-                    <TableCell>${sale.total.toFixed(2)}</TableCell>
+                    <TableCell>${sale.totalAmount.toFixed(2)}</TableCell>
                     <TableCell>{getPaymentMethodLabel(sale.paymentMethod)}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
@@ -354,7 +390,7 @@ export const Sales: React.FC = () => {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => append({ productId: '', quantity: 1, unitPrice: 0, discount: 0 })}
+                onClick={() => append({ productId: '', quantity: 1, unitPrice: 0 })}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Agregar Producto
@@ -362,7 +398,7 @@ export const Sales: React.FC = () => {
             </div>
 
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 border rounded-lg">
+              <div key={field.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border rounded-lg">
                 <Select
                   label="Producto"
                   {...register(`items.${index}.productId`)}
@@ -391,12 +427,6 @@ export const Sales: React.FC = () => {
                   step="0.01"
                   {...register(`items.${index}.unitPrice`, { valueAsNumber: true })}
                   error={errors.items?.[index]?.unitPrice?.message}
-                />
-                <Input
-                  label="Descuento (%)"
-                  type="number"
-                  {...register(`items.${index}.discount`, { valueAsNumber: true })}
-                  error={errors.items?.[index]?.discount?.message}
                 />
                 <div className="flex items-end">
                   <Button
@@ -448,7 +478,7 @@ export const Sales: React.FC = () => {
         <Modal
           isOpen={!!selectedSale}
           onClose={() => setSelectedSale(null)}
-          title={`Detalle de Venta - ${selectedSale.invoiceNumber}`}
+          title={`Detalle de Venta - #${selectedSale.id}`}
           size="lg"
         >
           <div className="space-y-4">
@@ -481,7 +511,6 @@ export const Sales: React.FC = () => {
                     <TableHead>Producto</TableHead>
                     <TableHead>Cantidad</TableHead>
                     <TableHead>Precio</TableHead>
-                    <TableHead>Descuento</TableHead>
                     <TableHead>Total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -491,7 +520,6 @@ export const Sales: React.FC = () => {
                       <TableCell>{item.product.name}</TableCell>
                       <TableCell>{item.quantity}</TableCell>
                       <TableCell>${item.unitPrice.toFixed(2)}</TableCell>
-                      <TableCell>{item.discount}%</TableCell>
                       <TableCell>${item.total.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
@@ -500,10 +528,6 @@ export const Sales: React.FC = () => {
             </div>
 
             <div className="border-t pt-4">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>${selectedSale.subtotal.toFixed(2)}</span>
-              </div>
               <div className="flex justify-between">
                 <span>Descuento:</span>
                 <span>{selectedSale.discount}%</span>
@@ -514,7 +538,7 @@ export const Sales: React.FC = () => {
               </div>
               <div className="flex justify-between font-bold text-lg">
                 <span>Total:</span>
-                <span>${selectedSale.total.toFixed(2)}</span>
+                <span>${selectedSale.totalAmount.toFixed(2)}</span>
               </div>
             </div>
 

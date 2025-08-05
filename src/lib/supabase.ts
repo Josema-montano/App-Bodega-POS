@@ -20,7 +20,7 @@ export interface Database {
           id: string
           email: string
           name: string
-          role: 'admin' | 'worker' | 'distributor'
+          role: 'admin' | 'employee'
           is_active: boolean
           created_at: string
           updated_at: string
@@ -29,7 +29,7 @@ export interface Database {
           id?: string
           email: string
           name: string
-          role: 'admin' | 'worker' | 'distributor'
+          role: 'admin' | 'employee'
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -38,7 +38,7 @@ export interface Database {
           id?: string
           email?: string
           name?: string
-          role?: 'admin' | 'worker' | 'distributor'
+          role?: 'admin' | 'employee'
           is_active?: boolean
           created_at?: string
           updated_at?: string
