@@ -36,11 +36,11 @@ export const useAuthStore = create<AuthState>()(persist(
         if (error) throw error
         
         if (data.user) {
-          // Obtener información adicional del usuario desde la tabla users
+          // Obtener información adicional del usuario desde la tabla usuarios
           const { data: userData, error: userError } = await supabase
-            .from('users')
+            .from('usuarios')
             .select('*')
-            .eq('email', email)
+            .eq('id', data.user.id)
             .single()
           
           if (userError) {
@@ -58,12 +58,12 @@ export const useAuthStore = create<AuthState>()(persist(
           } else {
             const user: User = {
               id: userData.id,
-              email: userData.email,
-              name: userData.name,
-              role: userData.role,
-              isActive: userData.is_active,
-              createdAt: new Date(userData.created_at),
-              updatedAt: new Date(userData.updated_at)
+              email: data.user.email!,
+              name: userData.nombre,
+              role: userData.rol === 'admin' ? 'admin' : 'employee',
+              isActive: userData.activo,
+              createdAt: new Date(userData.creado_en),
+              updatedAt: new Date(userData.actualizado_en)
             }
             set({ user, isAuthenticated: true })
           }

@@ -19,7 +19,7 @@ export const useSupabaseInit = () => {
     const checkConnection = async () => {
       try {
         const { data, error } = await supabase
-          .from('users')
+          .from('usuarios')
           .select('count')
           .limit(1)
         if (error) {

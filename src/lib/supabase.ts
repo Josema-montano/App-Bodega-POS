@@ -4,202 +4,206 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Debug temporal
+console.log('🔍 SUPABASE CONFIG DEBUG:')
+console.log('URL from env:', supabaseUrl)
+console.log('Anon key from env:', supabaseAnonKey ? '***...***' : 'NOT SET')
+console.log('All env vars:', import.meta.env)
+
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Las variables de entorno de Supabase no están configuradas correctamente')
 }
 
 // Crear cliente de Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+console.log('✅ Supabase client created with URL:', supabaseUrl)
 
 // Tipos para las tablas de la base de datos
 export interface Database {
   public: {
     Tables: {
-      users: {
+      usuarios: {
         Row: {
           id: string
-          email: string
-          name: string
-          role: 'admin' | 'employee'
-          is_active: boolean
-          created_at: string
-          updated_at: string
+          nombre: string
+          rol: 'admin' | 'empleado'
+          activo: boolean
+          creado_en: string
+          actualizado_en: string
         }
         Insert: {
           id?: string
-          email: string
-          name: string
-          role: 'admin' | 'employee'
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          nombre: string
+          rol: 'admin' | 'empleado'
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
         Update: {
           id?: string
-          email?: string
-          name?: string
-          role?: 'admin' | 'employee'
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          nombre?: string
+          rol?: 'admin' | 'empleado'
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
       }
-      products: {
+      productos: {
         Row: {
           id: string
-          name: string
-          description: string | null
-          price: number
-          cost: number
-          category: string
-          brand: string | null
+          nombre: string
+          descripcion: string | null
+          precio: number
+          costo: number
+          categoria: string
+          marca: string | null
           sku: string
-          barcode: string | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
+          codigo_barras: string | null
+          activo: boolean
+          creado_en: string
+          actualizado_en: string
         }
         Insert: {
           id?: string
-          name: string
-          description?: string | null
-          price: number
-          cost: number
-          category: string
-          brand?: string | null
+          nombre: string
+          descripcion?: string | null
+          precio: number
+          costo: number
+          categoria: string
+          marca?: string | null
           sku: string
-          barcode?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          codigo_barras?: string | null
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
         Update: {
           id?: string
-          name?: string
-          description?: string | null
-          price?: number
-          cost?: number
-          category?: string
-          brand?: string | null
+          nombre?: string
+          descripcion?: string | null
+          precio?: number
+          costo?: number
+          categoria?: string
+          marca?: string | null
           sku?: string
-          barcode?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          codigo_barras?: string | null
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
       }
-      customers: {
+      clientes: {
         Row: {
           id: string
-          name: string
+          nombre: string
           email: string | null
-          phone: string | null
-          address: string | null
-          current_debt: number
-          credit_limit: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
+          telefono: string | null
+          direccion: string | null
+          deuda_actual: number
+          limite_credito: number
+          activo: boolean
+          creado_en: string
+          actualizado_en: string
         }
         Insert: {
           id?: string
-          name: string
+          nombre: string
           email?: string | null
-          phone?: string | null
-          address?: string | null
-          current_debt?: number
-          credit_limit?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          telefono?: string | null
+          direccion?: string | null
+          deuda_actual?: number
+          limite_credito?: number
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
         Update: {
           id?: string
-          name?: string
+          nombre?: string
           email?: string | null
-          phone?: string | null
-          address?: string | null
-          current_debt?: number
-          credit_limit?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          telefono?: string | null
+          direccion?: string | null
+          deuda_actual?: number
+          limite_credito?: number
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
       }
-      suppliers: {
+      proveedores: {
         Row: {
           id: string
-          name: string
-          contact_person: string | null
+          nombre: string
+          contacto: string | null
           email: string | null
-          phone: string | null
-          address: string | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
+          telefono: string | null
+          direccion: string | null
+          activo: boolean
+          creado_en: string
+          actualizado_en: string
         }
         Insert: {
           id?: string
-          name: string
-          contact_person?: string | null
+          nombre: string
+          contacto?: string | null
           email?: string | null
-          phone?: string | null
-          address?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          telefono?: string | null
+          direccion?: string | null
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
         Update: {
           id?: string
-          name?: string
-          contact_person?: string | null
+          nombre?: string
+          contacto?: string | null
           email?: string | null
-          phone?: string | null
-          address?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          telefono?: string | null
+          direccion?: string | null
+          activo?: boolean
+          creado_en?: string
+          actualizado_en?: string
         }
       }
-      sales: {
+      ventas: {
         Row: {
           id: string
-          customer_id: string | null
-          user_id: string
-          total_amount: number
-          discount: number
-          tax: number
-          payment_method: 'cash' | 'card' | 'transfer' | 'credit'
-          status: 'pending' | 'completed' | 'cancelled'
-          notes: string | null
-          created_at: string
-          updated_at: string
+          cliente_id: string | null
+          usuario_id: string
+          monto_total: number
+          descuento: number
+          impuesto: number
+          metodo_pago: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'cheque'
+          estado: 'pendiente' | 'completada' | 'cancelada' | 'reembolsada'
+          notas: string | null
+          creado_en: string
+          actualizado_en: string
         }
         Insert: {
           id?: string
-          customer_id?: string | null
-          user_id: string
-          total_amount: number
-          discount?: number
-          tax?: number
-          payment_method: 'cash' | 'card' | 'transfer' | 'credit'
-          status?: 'pending' | 'completed' | 'cancelled'
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
+          cliente_id?: string | null
+          usuario_id: string
+          monto_total: number
+          descuento?: number
+          impuesto?: number
+          metodo_pago: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'cheque'
+          estado?: 'pendiente' | 'completada' | 'cancelada' | 'reembolsada'
+          notas?: string | null
+          creado_en?: string
+          actualizado_en?: string
         }
         Update: {
           id?: string
-          customer_id?: string | null
-          user_id?: string
-          total_amount?: number
-          discount?: number
-          tax?: number
-          payment_method?: 'cash' | 'card' | 'transfer' | 'credit'
-          status?: 'pending' | 'completed' | 'cancelled'
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
+          cliente_id?: string | null
+          usuario_id?: string
+          monto_total?: number
+          descuento?: number
+          impuesto?: number
+          metodo_pago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'cheque'
+          estado?: 'pendiente' | 'completada' | 'cancelada' | 'reembolsada'
+          notas?: string | null
+          creado_en?: string
+          actualizado_en?: string
         }
       }
     }
