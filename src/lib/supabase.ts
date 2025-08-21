@@ -5,6 +5,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Debug temporal
+/*
 console.log('🔍 SUPABASE CONFIG DEBUG:')
 console.log('URL from env:', supabaseUrl)
 console.log('Anon key from env:', supabaseAnonKey ? '***...***' : 'NOT SET')
@@ -13,6 +14,7 @@ console.log('All env vars:', import.meta.env)
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Las variables de entorno de Supabase no están configuradas correctamente')
 }
+*/
 
 // Crear cliente de Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)

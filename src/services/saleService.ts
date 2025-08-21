@@ -2,53 +2,52 @@ import { supabase, handleSupabaseError } from '../lib/supabase'
 import type { Sale, SaleItem } from '../types'
 import { inventoryService } from './inventoryService'
 import { transactionService } from './transactionService'
-import { useAppStore } from '../store'
 
 export const saleService = {
   // Obtener todas las ventas
   async getAll(): Promise<Sale[]> {
     try {
       const { data, error } = await supabase
-        .from('sales')
+        .from('ventas')
         .select(`
           *,
-          customer:customers(id, name),
-          user:users(id, name),
-          sale_items(
+          customer:clientes(id, nombre),
+          user:usuarios(id, nombre),
+          items_venta(
             id,
-            product_id,
-            quantity,
-            unit_price,
+            producto_id,
+            cantidad,
+            precio_unitario,
             total,
-            product:products(id, name, sku)
+            producto:productos(id, nombre, sku)
           )
         `)
-        .order('created_at', { ascending: false })
+  .order('creado_en', { ascending: false })
       
       if (error) throw error
-      return data?.map(item => ({
+      return (data?.map(item => ({
         id: item.id,
-        customerId: item.customer_id,
-        customer: item.customer,
-        userId: item.user_id,
-        user: item.user,
-        items: item.sale_items?.map((saleItem: any) => ({
+        customerId: item.cliente_id,
+        customer: item.customer as any,
+        userId: item.usuario_id,
+        user: item.user as any,
+        items: item.items_venta?.map((saleItem: any) => ({
           id: saleItem.id,
-          productId: saleItem.product_id,
-          product: saleItem.product,
-          quantity: saleItem.quantity,
-          unitPrice: saleItem.unit_price,
+          productId: saleItem.producto_id,
+          product: saleItem.producto as any,
+          quantity: saleItem.cantidad,
+          unitPrice: saleItem.precio_unitario,
           total: saleItem.total
         })) || [],
-        totalAmount: item.total_amount,
-        discount: item.discount,
-        tax: item.tax,
-        paymentMethod: item.payment_method,
-        status: item.status,
-        notes: item.notes,
-        createdAt: new Date(item.created_at),
-        updatedAt: new Date(item.updated_at)
-      })) || []
+  totalAmount: item.monto_total,
+        discount: item.descuento || 0,
+        tax: item.impuesto || 0,
+        paymentMethod: item.metodo_pago,
+        status: item.estado,
+        notes: item.notas,
+  createdAt: new Date(item.creado_en),
+  updatedAt: new Date(item.actualizado_en)
+      })) || []) as Sale[]
     } catch (error) {
       handleSupabaseError(error)
       return []
@@ -59,18 +58,18 @@ export const saleService = {
   async getById(id: string): Promise<Sale | null> {
     try {
       const { data, error } = await supabase
-        .from('sales')
+        .from('ventas')
         .select(`
           *,
-          customer:customers(id, name),
-          user:users(id, name),
-          sale_items(
+          customer:clientes(id, nombre),
+          user:usuarios(id, nombre),
+          items_venta(
             id,
-            product_id,
-            quantity,
-            unit_price,
+            producto_id,
+            cantidad,
+            precio_unitario,
             total,
-            product:products(id, name, sku)
+            producto:productos(id, nombre, sku)
           )
         `)
         .eq('id', id)
@@ -79,27 +78,27 @@ export const saleService = {
       if (error) throw error
       return {
         id: data.id,
-        customerId: data.customer_id,
-        customer: data.customer,
-        userId: data.user_id,
-        user: data.user,
-        items: data.sale_items?.map((saleItem: any) => ({
+        customerId: data.cliente_id,
+        customer: data.customer as any,
+        userId: data.usuario_id,
+        user: data.user as any,
+        items: data.items_venta?.map((saleItem: any) => ({
           id: saleItem.id,
-          productId: saleItem.product_id,
-          product: saleItem.product,
-          quantity: saleItem.quantity,
-          unitPrice: saleItem.unit_price,
+          productId: saleItem.producto_id,
+          product: saleItem.producto as any,
+          quantity: saleItem.cantidad,
+          unitPrice: saleItem.precio_unitario,
           total: saleItem.total
         })) || [],
-        totalAmount: data.total_amount,
-        discount: data.discount,
-        tax: data.tax,
-        paymentMethod: data.payment_method,
-        status: data.status,
-        notes: data.notes,
-        createdAt: new Date(data.created_at),
-        updatedAt: new Date(data.updated_at)
-      }
+  totalAmount: data.monto_total,
+        discount: data.descuento || 0,
+        tax: data.impuesto || 0,
+        paymentMethod: data.metodo_pago,
+        status: data.estado,
+        notes: data.notas,
+  createdAt: new Date(data.creado_en),
+  updatedAt: new Date(data.actualizado_en)
+      } as Sale
     } catch (error) {
       handleSupabaseError(error)
       return null
@@ -111,75 +110,57 @@ export const saleService = {
     try {
       // Iniciar transacción
       const { data: saleData, error: saleError } = await supabase
-        .from('sales')
+        .from('ventas')
         .insert({
-          customer_id: sale.customerId,
-          user_id: sale.userId,
-          total_amount: sale.totalAmount,
-          discount: sale.discount,
-          tax: sale.tax,
-          payment_method: sale.paymentMethod,
-          status: sale.status,
-          notes: sale.notes
+          cliente_id: sale.customerId,
+          usuario_id: sale.userId,
+          monto_total: sale.totalAmount,
+          descuento: sale.discount,
+          impuesto: sale.tax,
+          metodo_pago: sale.paymentMethod,
+          estado: sale.status,
+          notas: sale.notes
         })
         .select()
         .single()
-      
+
       if (saleError) throw saleError
 
-      // Insertar items de la venta
-      if (sale.items && sale.items.length > 0) {
-        const saleItems = sale.items.map(item => ({
-          sale_id: saleData.id,
-          product_id: item.productId,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          total: item.total
-        }))
+      // Crear items de venta
+      const saleItemsData = sale.items.map(item => ({
+        venta_id: saleData.id,
+        producto_id: item.productId,
+        cantidad: item.quantity,
+        precio_unitario: item.unitPrice,
+        total: item.total
+      }))
 
-        const { error: itemsError } = await supabase
-          .from('sale_items')
-          .insert(saleItems)
-        
-        if (itemsError) throw itemsError
+      const { error: itemsError } = await supabase
+        .from('items_venta')
+        .insert(saleItemsData)
 
-        // Reducir stock en inventario para cada producto vendido
-        for (const item of sale.items) {
-          try {
-            // Reducir el stock usando cantidad negativa
-            await inventoryService.updateStock(item.productId, -item.quantity)
-          } catch (inventoryError) {
-            console.error(`Error al actualizar stock para producto ${item.productId}:`, inventoryError)
-            // No lanzamos el error para no fallar toda la venta, pero lo registramos
-          }
-        }
+      if (itemsError) throw itemsError
+
+      // Actualizar inventario
+      for (const item of sale.items) {
+        await inventoryService.updateStock(item.productId, -item.quantity)
       }
 
-      // Registrar transacción automática de ingreso por la venta
-      try {
-        await transactionService.createSaleTransaction(
-          saleData.id,
-          sale.totalAmount,
-          sale.userId,
-          sale.paymentMethod
-        )
-      } catch (transactionError) {
-        console.error('Error al registrar transacción de venta:', transactionError)
-        // No lanzamos el error para no fallar toda la venta
-      }
+      // Registrar transacción
+      await transactionService.create({
+        type: 'income',
+        amount: sale.totalAmount,
+        description: `Venta #${saleData.id}`,
+        category: 'Ventas',
+        transactionDate: new Date(),
+        userId: sale.userId
+      })
 
-      // Crear notificación de venta completada
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'success',
-        title: 'Venta Completada',
-        message: `Nueva venta registrada por $${sale.totalAmount.toLocaleString()} con ${sale.items?.length || 0} producto(s).`,
-        priority: 'medium',
-        read: false
-      });
+      // Obtener la venta completa
+      const completeSale = await this.getById(saleData.id)
+      if (!completeSale) throw new Error('Error al obtener la venta creada')
 
-      // Obtener la venta completa con relaciones
-      return await this.getById(saleData.id) as Sale
+      return completeSale
     } catch (error) {
       handleSupabaseError(error)
       throw error
@@ -187,25 +168,64 @@ export const saleService = {
   },
 
   // Actualizar venta
-  async update(id: string, sale: Partial<Omit<Sale, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Sale> {
+  async update(id: string, updates: Partial<Sale>): Promise<Sale> {
     try {
-      const updateData: any = {}
-      if (sale.customerId !== undefined) updateData.customer_id = sale.customerId
-      if (sale.userId !== undefined) updateData.user_id = sale.userId
-      if (sale.totalAmount !== undefined) updateData.total_amount = sale.totalAmount
-      if (sale.discount !== undefined) updateData.discount = sale.discount
-      if (sale.tax !== undefined) updateData.tax = sale.tax
-      if (sale.paymentMethod !== undefined) updateData.payment_method = sale.paymentMethod
-      if (sale.status !== undefined) updateData.status = sale.status
-      if (sale.notes !== undefined) updateData.notes = sale.notes
-
-      const { error } = await supabase
-        .from('sales')
-        .update(updateData)
+      const { data, error } = await supabase
+        .from('ventas')
+        .update({
+          cliente_id: updates.customerId,
+          usuario_id: updates.userId,
+          monto_total: updates.totalAmount,
+          descuento: updates.discount,
+          impuesto: updates.tax,
+          metodo_pago: updates.paymentMethod,
+          estado: updates.status,
+          notas: updates.notes
+        })
         .eq('id', id)
-      
+        .select()
+        .single()
+
       if (error) throw error
-      return await this.getById(id) as Sale
+
+      // Obtener la venta actualizada
+      const updatedSale = await this.getById(id)
+      if (!updatedSale) throw new Error('Error al obtener la venta actualizada')
+
+      return updatedSale
+    } catch (error) {
+      handleSupabaseError(error)
+      throw error
+    }
+  },
+
+  // Eliminar venta
+  async delete(id: string): Promise<void> {
+    try {
+      // Primero obtener la venta para restaurar inventario
+      const sale = await this.getById(id)
+      if (sale) {
+        // Restaurar stock
+        for (const item of sale.items) {
+          await inventoryService.updateStock(item.productId, item.quantity)
+        }
+      }
+
+      // Eliminar items de venta primero
+      const { error: itemsError } = await supabase
+        .from('items_venta')
+        .delete()
+        .eq('venta_id', id)
+
+      if (itemsError) throw itemsError
+
+      // Eliminar venta
+      const { error } = await supabase
+        .from('ventas')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
     } catch (error) {
       handleSupabaseError(error)
       throw error
@@ -216,10 +236,10 @@ export const saleService = {
   async cancel(id: string): Promise<void> {
     try {
       const { error } = await supabase
-        .from('sales')
-        .update({ status: 'cancelled' })
+        .from('ventas')
+  .update({ estado: 'cancelada' })
         .eq('id', id)
-      
+
       if (error) throw error
     } catch (error) {
       handleSupabaseError(error)
@@ -231,51 +251,93 @@ export const saleService = {
   async getByDateRange(startDate: string, endDate: string): Promise<Sale[]> {
     try {
       const { data, error } = await supabase
-        .from('sales')
+        .from('ventas')
         .select(`
           *,
-          customer:customers(id, name),
-          user:users(id, name),
-          sale_items(
+          customer:clientes(id, nombre),
+          user:usuarios(id, nombre),
+          items_venta(
             id,
-            product_id,
-            quantity,
-            unit_price,
+            producto_id,
+            cantidad,
+            precio_unitario,
             total,
-            product:products(id, name, sku)
+            producto:productos(id, nombre, sku)
           )
         `)
-        .gte('created_at', startDate)
-        .lte('created_at', endDate)
-        .order('created_at', { ascending: false })
-      
+  .gte('creado_en', startDate)
+  .lte('creado_en', endDate)
+  .order('creado_en', { ascending: false })
+
       if (error) throw error
-      return data?.map(item => ({
+      return (data?.map(item => ({
         id: item.id,
-        customerId: item.customer_id,
-        customer: item.customer,
-        userId: item.user_id,
-        user: item.user,
-        items: item.sale_items?.map((saleItem: any) => ({
+        customerId: item.cliente_id,
+        customer: item.customer as any,
+        userId: item.usuario_id,
+        user: item.user as any,
+        items: item.items_venta?.map((saleItem: any) => ({
           id: saleItem.id,
-          productId: saleItem.product_id,
-          product: saleItem.product,
-          quantity: saleItem.quantity,
-          unitPrice: saleItem.unit_price,
+          productId: saleItem.producto_id,
+          product: saleItem.producto as any,
+          quantity: saleItem.cantidad,
+          unitPrice: saleItem.precio_unitario,
           total: saleItem.total
         })) || [],
-        totalAmount: item.total_amount,
-        discount: item.discount,
-        tax: item.tax,
-        paymentMethod: item.payment_method,
-        status: item.status,
-        notes: item.notes,
-        createdAt: new Date(item.created_at),
-        updatedAt: new Date(item.updated_at)
-      })) || []
+  totalAmount: item.monto_total,
+        discount: item.descuento || 0,
+        tax: item.impuesto || 0,
+        paymentMethod: item.metodo_pago,
+        status: item.estado,
+        notes: item.notas,
+  createdAt: new Date(item.creado_en),
+  updatedAt: new Date(item.actualizado_en)
+      })) || []) as Sale[]
     } catch (error) {
       handleSupabaseError(error)
       return []
+    }
+  },
+
+  // Obtener estadísticas de ventas
+  async getStats(startDate?: Date, endDate?: Date) {
+    try {
+      let query = supabase
+        .from('ventas')
+        .select('monto_total, creado_en, estado')
+
+      if (startDate) {
+  query = query.gte('creado_en', startDate.toISOString())
+      }
+      if (endDate) {
+  query = query.lte('creado_en', endDate.toISOString())
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      const totalSales = data?.length || 0
+  const totalRevenue = data?.reduce((sum, sale: any) => sum + (sale.monto_total || 0), 0) || 0
+  const completedSales = data?.filter((sale: any) => sale.estado === 'completada').length || 0
+  const pendingSales = data?.filter((sale: any) => sale.estado === 'pendiente').length || 0
+
+      return {
+        totalSales,
+        totalRevenue,
+        completedSales,
+        pendingSales,
+        averageSaleAmount: totalSales > 0 ? totalRevenue / totalSales : 0
+      }
+    } catch (error) {
+      handleSupabaseError(error)
+      return {
+        totalSales: 0,
+        totalRevenue: 0,
+        completedSales: 0,
+        pendingSales: 0,
+        averageSaleAmount: 0
+      }
     }
   }
 }

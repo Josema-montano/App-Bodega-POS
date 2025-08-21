@@ -39,7 +39,7 @@ export const Dashboard: React.FC = () => {
     };
 
     loadInitialData();
-  }, [fetchProducts, fetchCustomers, fetchSales]);
+  }, []); // Remover las dependencias que causan el loop infinito
 
   const lowStockProducts = getLowStockProducts();
   const todaySales = getTodaySales();
@@ -139,7 +139,7 @@ export const Dashboard: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
-          <Card key={index}>
+          <Card key={`stat-${stat.title}-${stat.value}-${index}`}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -215,7 +215,7 @@ export const Dashboard: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {topProducts.map((product, index) => (
-                  <div key={index} className="flex items-center justify-between">
+                  <div key={`top-product-${product.name}-${product.sales}-${index}`} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{product.name}</p>
                       <p className="text-sm text-gray-600">{product.sales} unidades</p>
